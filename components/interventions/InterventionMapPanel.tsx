@@ -1,9 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { calculateZones } from "@/domain/zones/calculateZones";
 import type { ZoneFeature } from "@/domain/zones/types";
 import { Button, Input, Label } from "@/components/ui/forms";
 
@@ -13,7 +12,7 @@ const InterventionMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-[420px] items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-sm text-slate-500">
+      <div className="flex h-[min(70vh,560px)] items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-sm text-slate-500">
         Cargando mapa…
       </div>
     ),
@@ -64,30 +63,6 @@ export function InterventionMapPanel({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const previewZones = useMemo(() => {
-    if (!coordinates) {
-      return {
-        zoneI: intervention.manualOverrides?.zoneI ?? intervention.zones?.zoneI,
-        zoneII:
-          intervention.manualOverrides?.zoneII ?? intervention.zones?.zoneII,
-      };
-    }
-
-    const result = calculateZones({
-      point: coordinates,
-      zoneParams: {
-        formulaVersion: intervention.zoneParams.formulaVersion,
-        radiusZoneIMeters: radiusI,
-        radiusZoneIIMeters: radiusII,
-      },
-    });
-
-    return {
-      zoneI: intervention.manualOverrides?.zoneI ?? result.zoneI,
-      zoneII: intervention.manualOverrides?.zoneII ?? result.zoneII,
-    };
-  }, [coordinates, radiusI, radiusII, intervention]);
 
   const onSelectPoint = useCallback((lngLat: [number, number]) => {
     setCoordinates(lngLat);
@@ -162,12 +137,13 @@ export function InterventionMapPanel({
       <div>
         <InterventionMap
           coordinates={coordinates}
-          zoneI={previewZones.zoneI}
-          zoneII={previewZones.zoneII}
+          radiusZoneIMeters={radiusI}
+          radiusZoneIIMeters={radiusII}
           onSelectPoint={onSelectPoint}
         />
         <p className="mt-2 text-sm text-slate-500">
-          Haz clic en el mapa para seleccionar el punto de la intervención.
+          Haz clic en el mapa para fijar el centro; se dibujan Zona I y Zona II
+          según los radios del panel.
         </p>
       </div>
 

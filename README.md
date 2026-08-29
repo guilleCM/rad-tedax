@@ -56,6 +56,20 @@ Abre [http://localhost:3000](http://localhost:3000).
 | `npm test` | Tests unitarios (`calculateZones`) |
 | `npm run icons` | Regenera iconos PWA |
 
+## Mapa
+
+Por defecto se usa OpenFreeMap (sin API key):
+
+```env
+NEXT_PUBLIC_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
+```
+
+Si los tiles no cargan bien en tu red, puedes usar MapTiler (plan free) u otro estilo MapLibre compatible:
+
+```env
+NEXT_PUBLIC_MAP_STYLE_URL=https://api.maptiler.com/maps/streets/style.json?key=YOUR_KEY
+```
+
 ## Estructura relevante
 
 - `app/` — rutas UI + Route Handlers
