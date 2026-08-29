@@ -1,0 +1,28 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { jsonError, unauthorized } from "@/lib/api";
+import { objectIdSchema } from "@/lib/validations/intervention";
+import { recalculateIntervention } from "@/lib/services/interventions";
+
+type RouteContext = { params: Promise<{ id: string }> };
+
+export async function POST(_request: Request, context: RouteContext) {
+  const session = await auth();
+  if (!session?.user?.id) return unauthorized();
+
+  try {
+    const { id } = await context.params;
+    const idResult = objectIdSchema.safeParse(id);
+    if (!idResult.success) {
+      return NextResponse.json(
+        { error: { code: "VALIDATION", message: "Id inválido" } },
+        { status: 400 },
+      );
+    }
+
+    const data = await recalculateIntervention(id, session.user.id);
+    return NextResponse.json({ data });
+  } catch (error) {
+    return jsonError(error);
+  }
+}
