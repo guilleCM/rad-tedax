@@ -57,8 +57,7 @@ export function CreateUserForm({ actorRole, onSuccess, onCancel }: Props) {
     <form onSubmit={onSubmit} className="space-y-3">
       {!isManager && (
         <p className="text-sm text-muted">
-          El usuario se creará como interviniente con credenciales (sin acceso
-          al sistema).
+          El usuario se creará como interviniente para las operaciones (sin acceso al sistema).
         </p>
       )}
 
