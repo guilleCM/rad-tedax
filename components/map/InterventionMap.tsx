@@ -79,6 +79,16 @@ function lock2DView(map: Map) {
   map.keyboard.disableRotation();
 }
 
+function createDangerPointMarkerElement(): HTMLImageElement {
+  const img = document.createElement("img");
+  img.src = "/danger-point.png";
+  img.alt = "Punto de intervención";
+  img.width = 30;
+  img.height = 30;
+  img.draggable = false;
+  return img;
+}
+
 type Props = {
   coordinates: [number, number] | null;
   radiusZoneIMeters: number;
@@ -329,7 +339,10 @@ export function InterventionMap({
     }
 
     if (!markerRef.current) {
-      markerRef.current = new Marker({ color: "#0f172a" })
+      markerRef.current = new Marker({
+        element: createDangerPointMarkerElement(),
+        anchor: "center",
+      })
         .setLngLat(coordinates)
         .addTo(map);
     } else {

@@ -148,11 +148,6 @@ export function InterventionMapPanel({
           radiusZoneIIMeters={radiusII}
           onSelectPoint={onSelectPoint}
         />
-        <p className="mt-2 text-sm text-muted">
-          {readOnly
-            ? "Vista de solo lectura del mapa y las zonas."
-            : "Haz clic en el mapa para fijar el centro; se dibujan Zona I y Zona II según los radios del panel."}
-        </p>
       </div>
 
       <aside className="space-y-4 rounded-lg border border-border bg-card p-4">

@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { AppError, getIntervention } from "@/lib/services/interventions";
 import { canUpdateInterventionByOwner } from "@/lib/services/permissions";
 import { InterventionMapPanel } from "@/components/interventions/InterventionMapPanel";
+import { InterventionStatusBadge } from "@/components/interventions/InterventionStatusBadge";
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -21,7 +22,7 @@ export default async function InterventionMapPage({ params }: PageProps) {
     if (error instanceof AppError && error.status === 404) notFound();
     throw error;
   }
-
+console.log('intervention', intervention);
   const readOnly = !canUpdateInterventionByOwner(
     role,
     intervention.ownerId,
@@ -31,20 +32,18 @@ export default async function InterventionMapPage({ params }: PageProps) {
   return (
     <div className="space-y-4">
       <div>
-        <Link
-          href={`/interventions/${intervention.id}`}
-          className="text-sm text-muted hover:text-foreground"
-        >
-          ← Detalle
-        </Link>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-          Mapa · {intervention.name}
+        <h1 className="flex flex-wrap items-center gap-2 text-base tracking-tight">
+          <span className="font-semibold">Operación:</span><span>{intervention.name}</span>
+          <InterventionStatusBadge status={intervention.status} />
           {readOnly && (
-            <span className="ml-2 text-sm font-normal text-muted">
-              (solo lectura)
-            </span>
+            <span className="text-sm font-normal text-muted">(solo lectura)</span>
           )}
         </h1>
+        {intervention.createdAt && (
+          <p className="text-sm font-normal text-muted">
+            {new Date(intervention.createdAt).toLocaleString()}
+          </p>
+        )}
       </div>
       <InterventionMapPanel intervention={intervention} readOnly={readOnly} />
     </div>

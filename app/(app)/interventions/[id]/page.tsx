@@ -8,6 +8,7 @@ import {
   canUpdateInterventionByOwner,
 } from "@/lib/services/permissions";
 import { DeleteInterventionButton } from "@/components/interventions/DeleteInterventionButton";
+import { InterventionStatusBadge } from "@/components/interventions/InterventionStatusBadge";
 import { Button } from "@/components/ui/forms";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -44,11 +45,11 @@ export default async function InterventionDetailPage({ params }: PageProps) {
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">
             {intervention.name}
           </h1>
-          <p className="text-sm text-muted">
-            {new Date(intervention.occurredAt).toLocaleString("es-ES")} ·{" "}
-            {intervention.status}
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
+            <span>{new Date(intervention.occurredAt).toLocaleString("es-ES")}</span>
+            <InterventionStatusBadge status={intervention.status} />
             {!canEdit && (
-              <span className="ml-2 text-xs">· Solo lectura</span>
+              <span className="text-xs">· Solo lectura</span>
             )}
           </p>
         </div>

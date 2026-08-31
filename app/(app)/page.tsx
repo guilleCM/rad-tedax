@@ -3,6 +3,7 @@ import { MapPin, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { canCreateIntervention } from "@/lib/services/permissions";
 import { listInterventions } from "@/lib/services/interventions";
+import { InterventionStatusBadge } from "@/components/interventions/InterventionStatusBadge";
 import { Button } from "@/components/ui/forms";
 
 export default async function DashboardPage() {
@@ -72,9 +73,11 @@ export default async function DashboardPage() {
               >
                 <div>
                   <p className="font-medium text-foreground">{item.name}</p>
-                  <p className="text-sm text-muted">
-                    {new Date(item.occurredAt).toLocaleString("es-ES")} ·{" "}
-                    {item.status}
+                  <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
+                    <span>
+                      {new Date(item.occurredAt).toLocaleString("es-ES")}
+                    </span>
+                    <InterventionStatusBadge status={item.status} />
                   </p>
                 </div>
                 <p className="flex items-center gap-1.5 text-sm text-muted">
