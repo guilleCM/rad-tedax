@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Map } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { AppError, getIntervention } from "@/lib/services/interventions";
 import { Button } from "@/components/ui/forms";
@@ -24,25 +25,28 @@ export default async function InterventionDetailPage({ params }: PageProps) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Link href="/" className="text-sm text-slate-500 hover:text-slate-800">
+          <Link href="/" className="text-sm text-muted hover:text-foreground">
             ← Intervenciones
           </Link>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">
             {intervention.name}
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted">
             {new Date(intervention.occurredAt).toLocaleString("es-ES")} ·{" "}
             {intervention.status}
           </p>
         </div>
         <Link href={`/interventions/${intervention.id}/map`}>
-          <Button type="button">Abrir mapa</Button>
+          <Button type="button">
+            <Map className="h-4 w-4" aria-hidden />
+            Abrir mapa
+          </Button>
         </Link>
       </div>
 
-      <dl className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2">
+      <dl className="grid gap-4 rounded-lg border border-border bg-card p-4 sm:grid-cols-2">
         <div>
-          <dt className="text-xs uppercase tracking-wide text-slate-500">
+          <dt className="text-xs uppercase tracking-wide text-muted">
             Ubicación
           </dt>
           <dd className="mt-1 font-mono text-sm">
@@ -52,13 +56,13 @@ export default async function InterventionDetailPage({ params }: PageProps) {
           </dd>
         </div>
         <div>
-          <dt className="text-xs uppercase tracking-wide text-slate-500">
+          <dt className="text-xs uppercase tracking-wide text-muted">
             Fórmula
           </dt>
           <dd className="mt-1 text-sm">{intervention.zoneParams.formulaVersion}</dd>
         </div>
         <div>
-          <dt className="text-xs uppercase tracking-wide text-slate-500">
+          <dt className="text-xs uppercase tracking-wide text-muted">
             Radio Zona I
           </dt>
           <dd className="mt-1 text-sm">
@@ -66,7 +70,7 @@ export default async function InterventionDetailPage({ params }: PageProps) {
           </dd>
         </div>
         <div>
-          <dt className="text-xs uppercase tracking-wide text-slate-500">
+          <dt className="text-xs uppercase tracking-wide text-muted">
             Radio Zona II
           </dt>
           <dd className="mt-1 text-sm">
@@ -75,7 +79,7 @@ export default async function InterventionDetailPage({ params }: PageProps) {
         </div>
         {intervention.manualOverrides?.notes && (
           <div className="sm:col-span-2">
-            <dt className="text-xs uppercase tracking-wide text-slate-500">
+            <dt className="text-xs uppercase tracking-wide text-muted">
               Notas
             </dt>
             <dd className="mt-1 text-sm">{intervention.manualOverrides.notes}</dd>

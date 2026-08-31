@@ -25,7 +25,7 @@ export default async function InterventionMapPage({ params }: PageProps) {
       <div>
         <Link
           href={`/interventions/${intervention.id}`}
-          className="text-sm text-slate-500 hover:text-slate-800"
+          className="text-sm text-muted hover:text-foreground"
         >
           ← Detalle
         </Link>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MapPin, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { listInterventions } from "@/lib/services/interventions";
 import { Button } from "@/components/ui/forms";
@@ -23,27 +24,31 @@ export default async function DashboardPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Intervenciones</h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted">
             Gestiona y localiza intervenciones radiológicas
           </p>
         </div>
         <Link href="/interventions/new">
-          <Button type="button">Nueva intervención</Button>
+          <Button type="button">
+            <Plus className="h-4 w-4" aria-hidden />
+            Nueva intervención
+          </Button>
         </Link>
       </div>
 
       {loadError && (
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p className="rounded-md bg-warning px-3 py-2 text-sm text-warning-foreground">
           {loadError}
         </p>
       )}
 
       {!loadError && interventions.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center">
-          <p className="text-slate-600">Aún no hay intervenciones.</p>
+        <div className="rounded-lg border border-dashed border-border bg-card p-10 text-center">
+          <MapPin className="mx-auto h-8 w-8 text-muted" aria-hidden />
+          <p className="mt-3 text-muted">Aún no hay intervenciones.</p>
           <Link
             href="/interventions/new"
-            className="mt-3 inline-block text-sm font-medium text-slate-900 underline"
+            className="mt-3 inline-block text-sm font-medium text-accent underline"
           >
             Crear la primera
           </Link>
@@ -51,21 +56,22 @@ export default async function DashboardPage() {
       ) : null}
 
       {interventions.length > 0 ? (
-        <ul className="divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
           {interventions.map((item) => (
             <li key={item.id}>
               <Link
                 href={`/interventions/${item.id}`}
-                className="flex flex-col gap-1 px-4 py-4 hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-1 px-4 py-4 hover:bg-surface sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
-                  <p className="font-medium text-slate-900">{item.name}</p>
-                  <p className="text-sm text-slate-500">
+                  <p className="font-medium text-foreground">{item.name}</p>
+                  <p className="text-sm text-muted">
                     {new Date(item.occurredAt).toLocaleString("es-ES")} ·{" "}
                     {item.status}
                   </p>
                 </div>
-                <p className="text-sm text-slate-500">
+                <p className="flex items-center gap-1.5 text-sm text-muted">
+                  <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden />
                   {item.location
                     ? `${item.location.point.coordinates[1].toFixed(4)}, ${item.location.point.coordinates[0].toFixed(4)}`
                     : "Sin ubicación"}

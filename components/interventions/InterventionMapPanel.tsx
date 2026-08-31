@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 import type { ZoneFeature } from "@/domain/zones/types";
 import { Button, Input, Label } from "@/components/ui/forms";
 
@@ -12,7 +13,7 @@ const InterventionMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex h-[min(70vh,560px)] items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-sm text-slate-500">
+      <div className="flex h-[min(70vh,560px)] items-center justify-center rounded-lg border border-border bg-surface text-sm text-muted">
         Cargando mapa…
       </div>
     ),
@@ -141,16 +142,16 @@ export function InterventionMapPanel({
           radiusZoneIIMeters={radiusII}
           onSelectPoint={onSelectPoint}
         />
-        <p className="mt-2 text-sm text-slate-500">
+        <p className="mt-2 text-sm text-muted">
           Haz clic en el mapa para fijar el centro; se dibujan Zona I y Zona II
           según los radios del panel.
         </p>
       </div>
 
-      <aside className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
+      <aside className="space-y-4 rounded-lg border border-border bg-card p-4">
         <div>
           <Label>Coordenadas [lng, lat]</Label>
-          <p className="font-mono text-xs text-slate-700">
+          <p className="font-mono text-xs text-foreground">
             {coordinates
               ? `${coordinates[0].toFixed(6)}, ${coordinates[1].toFixed(6)}`
               : "Sin seleccionar"}
@@ -199,30 +200,32 @@ export function InterventionMapPanel({
           >
             Recalcular en servidor
           </Button>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted">
             Recalcular actualiza las zonas guardadas en el servidor (BD). El
             dibujo del mapa usa el punto y radios del panel al instante.
           </p>
         </div>
 
         {error && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p className="flex items-start gap-2 rounded-md bg-danger px-3 py-2 text-sm text-danger-foreground">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             {error}
           </p>
         )}
         {message && (
-          <p className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          <p className="flex items-start gap-2 rounded-md bg-success px-3 py-2 text-sm text-success-foreground">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             {message}
           </p>
         )}
 
-        <div className="space-y-1 text-xs text-slate-500">
+        <div className="space-y-1 text-xs text-muted">
           <p>
-            <span className="inline-block h-2 w-2 rounded-full bg-red-600" />{" "}
+            <span className="inline-block h-2 w-2 rounded-full bg-red-500" />{" "}
             Zona I — Medidas Urgentes
           </p>
           <p>
-            <span className="inline-block h-2 w-2 rounded-full bg-orange-500" />{" "}
+            <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />{" "}
             Zona II — Alerta
           </p>
           <p>Fórmula: {intervention.zoneParams.formulaVersion}</p>

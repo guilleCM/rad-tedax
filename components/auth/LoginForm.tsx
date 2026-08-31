@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { AlertCircle } from "lucide-react";
 import { Button, Input, Label } from "@/components/ui/forms";
 
 export function LoginForm() {
@@ -61,7 +62,10 @@ export function LoginForm() {
         />
       </div>
       {error && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        <p className="flex items-start gap-2 rounded-md bg-danger px-3 py-2 text-sm text-danger-foreground">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          {error}
+        </p>
       )}
       <Button type="submit" className="w-full" disabled={loading}>
         {loading ? "Entrando…" : "Iniciar sesión"}

@@ -9,14 +9,14 @@ export function Button({
 }) {
   const styles =
     variant === "primary"
-      ? "bg-slate-900 text-white hover:bg-slate-800"
+      ? "bg-primary text-primary-foreground hover:opacity-90"
       : variant === "danger"
-        ? "bg-red-700 text-white hover:bg-red-600"
-        : "border border-slate-300 bg-white text-slate-800 hover:bg-slate-50";
+        ? "bg-red-600 text-white hover:bg-red-500"
+        : "border border-border bg-card text-foreground hover:bg-surface";
 
   return (
     <button
-      className={`inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50 ${styles} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50 ${styles} ${className}`}
       {...props}
     />
   );
@@ -28,7 +28,7 @@ export function Input({
 }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={`w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none ring-slate-400 focus:ring-2 ${className}`}
+      className={`w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none ring-ring focus:ring-2 ${className}`}
       {...props}
     />
   );
@@ -42,7 +42,7 @@ export function Label({
   htmlFor?: string;
 }) {
   return (
-    <label htmlFor={htmlFor} className="mb-1 block text-sm font-medium text-slate-700">
+    <label htmlFor={htmlFor} className="mb-1 block text-sm font-medium text-foreground">
       {children}
     </label>
   );

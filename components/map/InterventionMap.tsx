@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Layers } from "lucide-react";
 import {
   LngLatBounds,
   Map,
@@ -363,7 +364,7 @@ export function InterventionMap({
 
   return (
     <div className="relative">
-      <div className="relative h-[min(70vh,560px)] w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+      <div className="relative h-[min(70vh,560px)] w-full overflow-hidden rounded-lg border border-border bg-surface">
         <div ref={containerRef} className="absolute inset-0 h-full w-full" />
         {overlay && (overlay.rI > 0 || overlay.rII > 0) && (
           <svg
@@ -396,17 +397,20 @@ export function InterventionMap({
         )}
         <div className="pointer-events-none absolute left-3 top-3 z-10">
           <div
-            className="pointer-events-auto inline-flex overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm"
+            className="pointer-events-auto inline-flex items-center overflow-hidden rounded-md border border-border bg-card shadow-sm"
             role="group"
             aria-label="Capas del mapa"
           >
+            <span className="flex items-center border-r border-border px-2 text-muted">
+              <Layers className="h-3.5 w-3.5" aria-hidden />
+            </span>
             <button
               type="button"
               onClick={() => selectBasemap("streets")}
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                 basemap === "streets"
-                  ? "bg-slate-900 text-white"
-                  : "bg-white text-slate-700 hover:bg-slate-50"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-card text-foreground hover:bg-surface"
               }`}
             >
               Mapa
@@ -414,10 +418,10 @@ export function InterventionMap({
             <button
               type="button"
               onClick={() => selectBasemap("satellite")}
-              className={`border-l border-slate-200 px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`border-l border-border px-3 py-1.5 text-xs font-medium transition-colors ${
                 basemap === "satellite"
-                  ? "bg-slate-900 text-white"
-                  : "bg-white text-slate-700 hover:bg-slate-50"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-card text-foreground hover:bg-surface"
               }`}
             >
               Satélite
@@ -426,7 +430,7 @@ export function InterventionMap({
         </div>
       </div>
       {mapError && (
-        <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <p className="mt-2 rounded-md bg-warning px-3 py-2 text-sm text-warning-foreground">
           {mapError}
         </p>
       )}
