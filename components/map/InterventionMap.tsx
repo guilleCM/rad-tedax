@@ -1,13 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import circle from "@turf/circle";
 import {
   LngLatBounds,
   Map,
   Marker,
   NavigationControl,
-  type GeoJSONSource,
   type MapMouseEvent,
   type StyleSpecification,
 } from "maplibre-gl";
@@ -33,9 +31,42 @@ const OSM_STYLE: StyleSpecification = {
   ],
 };
 
-function getMapStyle(): string | StyleSpecification {
+type BasemapId = "streets" | "satellite";
+
+type ZoneOverlay = {
+  cx: number;
+  cy: number;
+  rI: number;
+  rII: number;
+};
+
+function getMaptilerApiKey() {
+  return process.env.NEXT_PUBLIC_MAPTILER_API_KEY?.trim() || "";
+}
+
+function getStreetsStyle(): string | StyleSpecification {
   const custom = process.env.NEXT_PUBLIC_MAP_STYLE_URL?.trim();
-  return custom || OSM_STYLE;
+  if (custom) return custom;
+
+  const key = getMaptilerApiKey();
+  if (key) {
+    return `https://api.maptiler.com/maps/streets-v2/style.json?key=${encodeURIComponent(key)}`;
+  }
+
+  return OSM_STYLE;
+}
+
+function getSatelliteStyle(): string | null {
+  const key = getMaptilerApiKey();
+  if (!key) return null;
+  return `https://api.maptiler.com/maps/satellite/style.json?key=${encodeURIComponent(key)}`;
+}
+
+function styleForBasemap(basemap: BasemapId): string | StyleSpecification {
+  if (basemap === "satellite") {
+    return getSatelliteStyle() ?? getStreetsStyle();
+  }
+  return getStreetsStyle();
 }
 
 type Props = {
@@ -45,145 +76,79 @@ type Props = {
   onSelectPoint: (lngLat: [number, number]) => void;
 };
 
-const EMPTY_FC: GeoJSON.FeatureCollection = {
-  type: "FeatureCollection",
-  features: [],
-};
-
-function ensureZoneLayers(map: Map) {
-  const zones: Array<{
-    sourceId: string;
-    fillId: string;
-    color: string;
-    opacity: number;
-  }> = [
-    {
-      sourceId: "zone-ii",
-      fillId: "zone-ii-fill",
-      color: "#f97316",
-      opacity: 0.25,
-    },
-    {
-      sourceId: "zone-i",
-      fillId: "zone-i-fill",
-      color: "#dc2626",
-      opacity: 0.35,
-    },
-  ];
-
-  for (const zone of zones) {
-    if (!map.getSource(zone.sourceId)) {
-      map.addSource(zone.sourceId, { type: "geojson", data: EMPTY_FC });
-    }
-
-    if (!map.getLayer(zone.fillId)) {
-      map.addLayer({
-        id: zone.fillId,
-        type: "fill",
-        source: zone.sourceId,
-        paint: {
-          "fill-color": zone.color,
-          "fill-opacity": zone.opacity,
-        },
-      });
-    }
-
-    const outlineId = `${zone.fillId}-outline`;
-    if (!map.getLayer(outlineId)) {
-      map.addLayer({
-        id: outlineId,
-        type: "line",
-        source: zone.sourceId,
-        paint: {
-          "line-color": zone.color,
-          "line-width": 2,
-        },
-      });
-    }
-  }
-}
-
-function featureCollectionForCircle(
+/** Offset a lng/lat by meters north (approx. spherical). */
+function offsetNorth(
   center: [number, number],
-  radiusMeters: number,
-): GeoJSON.FeatureCollection {
-  if (!(radiusMeters > 0)) return EMPTY_FC;
-
-  const feature = circle(center, radiusMeters / 1000, {
-    steps: 64,
-    units: "kilometers",
-  });
-
-  return {
-    type: "FeatureCollection",
-    features: [feature],
-  };
+  meters: number,
+): [number, number] {
+  const dLat = meters / 111_320;
+  return [center[0], center[1] + dLat];
 }
 
-function syncCircles(
+function metersToPixels(
+  map: Map,
+  center: [number, number],
+  meters: number,
+): number {
+  if (!(meters > 0)) return 0;
+  const p0 = map.project(center);
+  const p1 = map.project(offsetNorth(center, meters));
+  return Math.hypot(p1.x - p0.x, p1.y - p0.y);
+}
+
+function computeOverlay(
   map: Map,
   center: [number, number] | null,
   radiusI: number,
   radiusII: number,
-) {
-  const sourceII = map.getSource("zone-ii") as GeoJSONSource | undefined;
-  const sourceI = map.getSource("zone-i") as GeoJSONSource | undefined;
-  if (!sourceII || !sourceI) return;
-
-  if (!center) {
-    sourceII.setData(EMPTY_FC);
-    sourceI.setData(EMPTY_FC);
-    return;
-  }
-
-  sourceII.setData(featureCollectionForCircle(center, radiusII));
-  sourceI.setData(featureCollectionForCircle(center, radiusI));
+): ZoneOverlay | null {
+  if (!center) return null;
+  const projected = map.project(center);
+  return {
+    cx: projected.x,
+    cy: projected.y,
+    rI: metersToPixels(map, center, radiusI),
+    rII: metersToPixels(map, center, radiusII),
+  };
 }
 
-function boundsFromCircle(
+function boundsAroundPoint(
   center: [number, number],
   radiusMeters: number,
-): LngLatBounds | null {
-  if (!(radiusMeters > 0)) return null;
-
-  const feature = circle(center, radiusMeters / 1000, {
-    steps: 64,
-    units: "kilometers",
-  });
-  const ring = feature.geometry.coordinates[0];
-  if (!ring?.length) return null;
-
+): LngLatBounds {
+  const pad = Math.max(radiusMeters, 50);
+  const north = offsetNorth(center, pad);
+  const south = offsetNorth(center, -pad);
+  const metersPerDegLng =
+    111_320 * Math.cos((center[1] * Math.PI) / 180);
+  const dLng = pad / Math.max(metersPerDegLng, 1e-6);
   const bounds = new LngLatBounds();
-  for (const coord of ring) {
-    if (coord.length >= 2) {
-      bounds.extend([coord[0], coord[1]]);
-    }
-  }
-  return bounds.isEmpty() ? null : bounds;
+  bounds.extend([center[0] - dLng, south[1]]);
+  bounds.extend([center[0] + dLng, north[1]]);
+  return bounds;
 }
 
-function fitToCirclesOrPoint(
+function fitToZonesOrPoint(
   map: Map,
   coordinates: [number, number] | null,
   radiusII: number,
 ) {
-  if (coordinates) {
-    const zoneBounds = boundsFromCircle(coordinates, radiusII);
-    if (zoneBounds) {
-      map.fitBounds(zoneBounds, {
-        padding: 48,
-        maxZoom: 17,
-        duration: 500,
-      });
-      return;
-    }
+  if (!coordinates) return;
 
-    map.easeTo({
-      center: coordinates,
-      zoom: Math.max(map.getZoom(), 15),
+  if (radiusII > 0) {
+    map.fitBounds(boundsAroundPoint(coordinates, radiusII), {
+      padding: 48,
+      maxZoom: 17,
       duration: 500,
     });
+    return;
   }
+
+  map.easeTo({
+    center: coordinates,
+    zoom: Math.max(map.getZoom(), 15),
+    duration: 500,
+  });
 }
 
 export function InterventionMap({
@@ -201,7 +166,12 @@ export function InterventionMap({
   const radiusIIRef = useRef(radiusZoneIIMeters);
   const onSelectRef = useRef(onSelectPoint);
   const hadCoordinatesRef = useRef(Boolean(coordinates));
+  const updateOverlayRef = useRef<() => void>(() => {});
   const [mapError, setMapError] = useState<string | null>(null);
+  const [basemap, setBasemap] = useState<BasemapId>("streets");
+  const [overlay, setOverlay] = useState<ZoneOverlay | null>(null);
+  const maptilerKey = getMaptilerApiKey();
+  const satelliteAvailable = Boolean(maptilerKey);
 
   useEffect(() => {
     coordinatesRef.current = coordinates;
@@ -231,7 +201,7 @@ export function InterventionMap({
     const container = containerRef.current;
     const map = new Map({
       container,
-      style: getMapStyle(),
+      style: getStreetsStyle(),
       center: initialCenter,
       zoom: coordinates ? 15 : 6,
       minZoom: 2,
@@ -248,22 +218,29 @@ export function InterventionMap({
 
     map.addControl(new NavigationControl({ visualizePitch: false }), "top-right");
 
+    const refreshOverlay = () => {
+      setOverlay(
+        computeOverlay(
+          map,
+          coordinatesRef.current,
+          radiusIRef.current,
+          radiusIIRef.current,
+        ),
+      );
+    };
+    updateOverlayRef.current = refreshOverlay;
+
     map.on("click", (e: MapMouseEvent) => {
       onSelectRef.current([e.lngLat.lng, e.lngLat.lat]);
     });
 
-    const onStyleReady = () => {
+    const onStyleReady = (fit: boolean) => {
       styleReadyRef.current = true;
-      ensureZoneLayers(map);
-      syncCircles(
-        map,
-        coordinatesRef.current,
-        radiusIRef.current,
-        radiusIIRef.current,
-      );
+      map.getCanvas().style.cursor = "crosshair";
       map.resize();
-      if (coordinatesRef.current) {
-        fitToCirclesOrPoint(
+      refreshOverlay();
+      if (fit && coordinatesRef.current) {
+        fitToZonesOrPoint(
           map,
           coordinatesRef.current,
           radiusIIRef.current,
@@ -273,34 +250,38 @@ export function InterventionMap({
 
     map.on("load", () => {
       setMapError(null);
-      onStyleReady();
+      onStyleReady(true);
     });
 
     map.on("style.load", () => {
-      styleReadyRef.current = true;
-      ensureZoneLayers(map);
-      syncCircles(
-        map,
-        coordinatesRef.current,
-        radiusIRef.current,
-        radiusIIRef.current,
-      );
+      onStyleReady(false);
     });
+
+    for (const event of ["move", "zoom", "rotate", "pitch"] as const) {
+      map.on(event, refreshOverlay);
+    }
 
     map.on("error", (event) => {
       const message =
         event.error?.message ||
-        "No se pudieron cargar los tiles del mapa. Revisa la red o NEXT_PUBLIC_MAP_STYLE_URL.";
+        "No se pudieron cargar los tiles del mapa. Revisa NEXT_PUBLIC_MAPTILER_API_KEY.";
       setMapError(message);
     });
 
     const resizeObserver = new ResizeObserver(() => {
       map.resize();
+      refreshOverlay();
     });
     resizeObserver.observe(container);
 
-    requestAnimationFrame(() => map.resize());
-    const resizeTimer = window.setTimeout(() => map.resize(), 150);
+    requestAnimationFrame(() => {
+      map.resize();
+      refreshOverlay();
+    });
+    const resizeTimer = window.setTimeout(() => {
+      map.resize();
+      refreshOverlay();
+    }, 150);
 
     mapRef.current = map;
 
@@ -308,6 +289,7 @@ export function InterventionMap({
       window.clearTimeout(resizeTimer);
       resizeObserver.disconnect();
       styleReadyRef.current = false;
+      updateOverlayRef.current = () => {};
       markerRef.current?.remove();
       markerRef.current = null;
       map.remove();
@@ -326,6 +308,7 @@ export function InterventionMap({
       markerRef.current?.remove();
       markerRef.current = null;
       hadCoordinatesRef.current = false;
+      updateOverlayRef.current();
       return;
     }
 
@@ -340,25 +323,100 @@ export function InterventionMap({
     const isFirstPoint = !hadCoordinatesRef.current;
     hadCoordinatesRef.current = true;
     if (isFirstPoint && styleReadyRef.current) {
-      fitToCirclesOrPoint(map, coordinates, radiusIIRef.current);
+      fitToZonesOrPoint(map, coordinates, radiusIIRef.current);
     }
+
+    updateOverlayRef.current();
   }, [coordinates]);
 
-  // Circles from turf — same pattern as MapLibre draw-a-circle example
+  // Refresh SVG when radii change from the panel
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !styleReadyRef.current) return;
+    updateOverlayRef.current();
+  }, [coordinates, radiusZoneIMeters, radiusZoneIIMeters, basemap]);
 
-    ensureZoneLayers(map);
-    syncCircles(map, coordinates, radiusZoneIMeters, radiusZoneIIMeters);
-  }, [coordinates, radiusZoneIMeters, radiusZoneIIMeters]);
+  function selectBasemap(next: BasemapId) {
+    if (next === basemap) return;
+    if (next === "satellite" && !satelliteAvailable) return;
+
+    const map = mapRef.current;
+    if (!map) return;
+
+    setBasemap(next);
+    setMapError(null);
+    styleReadyRef.current = false;
+    map.setStyle(styleForBasemap(next));
+  }
 
   return (
     <div className="relative">
-      <div
-        ref={containerRef}
-        className="h-[min(70vh,560px)] w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
-      />
+      <div className="relative h-[min(70vh,560px)] w-full overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+        <div ref={containerRef} className="absolute inset-0 h-full w-full" />
+        {overlay && (overlay.rI > 0 || overlay.rII > 0) && (
+          <svg
+            className="pointer-events-none absolute inset-0 z-1 h-full w-full"
+            aria-hidden
+          >
+            {overlay.rII > 0 && (
+              <circle
+                cx={overlay.cx}
+                cy={overlay.cy}
+                r={overlay.rII}
+                fill="#f97316"
+                fillOpacity={0.28}
+                stroke="#ea580c"
+                strokeWidth={2.5}
+              />
+            )}
+            {overlay.rI > 0 && (
+              <circle
+                cx={overlay.cx}
+                cy={overlay.cy}
+                r={overlay.rI}
+                fill="#dc2626"
+                fillOpacity={0.4}
+                stroke="#b91c1c"
+                strokeWidth={2.5}
+              />
+            )}
+          </svg>
+        )}
+        <div className="pointer-events-none absolute left-3 top-3 z-10">
+          <div
+            className="pointer-events-auto inline-flex overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm"
+            role="group"
+            aria-label="Capas del mapa"
+          >
+            <button
+              type="button"
+              onClick={() => selectBasemap("streets")}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                basemap === "streets"
+                  ? "bg-slate-900 text-white"
+                  : "bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              Mapa
+            </button>
+            <button
+              type="button"
+              onClick={() => selectBasemap("satellite")}
+              disabled={!satelliteAvailable}
+              title={
+                satelliteAvailable
+                  ? "MapTiler Satellite"
+                  : "Configura NEXT_PUBLIC_MAPTILER_API_KEY para usar satélite"
+              }
+              className={`border-l border-slate-200 px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                basemap === "satellite"
+                  ? "bg-slate-900 text-white"
+                  : "bg-white text-slate-700 hover:bg-slate-50 disabled:hover:bg-white"
+              }`}
+            >
+              Satélite
+            </button>
+          </div>
+        </div>
+      </div>
       {mapError && (
         <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
           {mapError}

@@ -58,17 +58,19 @@ Abre [http://localhost:3000](http://localhost:3000).
 
 ## Mapa
 
-Por defecto se usa OpenFreeMap (sin API key):
+Con una API key de [MapTiler Cloud](https://cloud.maptiler.com/account/keys/) tienes **Mapa** (Streets) y **Satélite**:
+
+```env
+NEXT_PUBLIC_MAPTILER_API_KEY=YOUR_KEY
+```
+
+Opcional: forzar otro estilo solo para el botón Mapa:
 
 ```env
 NEXT_PUBLIC_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
 ```
 
-Si los tiles no cargan bien en tu red, puedes usar MapTiler (plan free) u otro estilo MapLibre compatible:
-
-```env
-NEXT_PUBLIC_MAP_STYLE_URL=https://api.maptiler.com/maps/streets/style.json?key=YOUR_KEY
-```
+Sin key MapTiler, el basemap cae a OSM raster (puede fallar en algunos navegadores) y Satélite queda deshabilitado.
 
 ## Estructura relevante
 

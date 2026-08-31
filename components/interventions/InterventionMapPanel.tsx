@@ -195,9 +195,14 @@ export function InterventionMapPanel({
             variant="secondary"
             onClick={recalculate}
             disabled={saving || !coordinates}
+            title="Vuelve a calcular y guardar Zona I/II en la base de datos a partir del punto y radios ya guardados. No dibuja el mapa."
           >
             Recalcular en servidor
           </Button>
+          <p className="text-xs text-slate-500">
+            Recalcular actualiza las zonas guardadas en el servidor (BD). El
+            dibujo del mapa usa el punto y radios del panel al instante.
+          </p>
         </div>
 
         {error && (
