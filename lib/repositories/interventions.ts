@@ -26,6 +26,11 @@ export async function findAllInterventions(): Promise<
   return col.find({}).sort({ updatedAt: -1 }).toArray();
 }
 
+export async function countInterventions(): Promise<number> {
+  const col = await interventionsCollection();
+  return col.countDocuments({});
+}
+
 export async function findInterventionsForUser(
   userId: string,
 ): Promise<WithId<InterventionDoc>[]> {

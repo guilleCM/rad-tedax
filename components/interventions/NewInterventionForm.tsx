@@ -5,9 +5,14 @@ import { useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { Button, Input, Label } from "@/components/ui/forms";
 
-export function NewInterventionForm() {
+type Props = {
+  defaultName: string;
+};
+
+export function NewInterventionForm({ defaultName }: Props) {
   const router = useRouter();
-  const [name, setName] = useState("");
+  const [name, setName] = useState(defaultName);
+  const [zone, setZone] = useState("");
   const [occurredAt, setOccurredAt] = useState(
     () => new Date().toISOString().slice(0, 16),
   );
@@ -19,13 +24,17 @@ export function NewInterventionForm() {
     setLoading(true);
     setError(null);
 
+    const body: Record<string, string> = {
+      name,
+      occurredAt: new Date(occurredAt).toISOString(),
+    };
+    const trimmedZone = zone.trim();
+    if (trimmedZone) body.locationLabel = trimmedZone;
+
     const res = await fetch("/api/interventions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        occurredAt: new Date(occurredAt).toISOString(),
-      }),
+      body: JSON.stringify(body),
     });
 
     const json = await res.json();
@@ -49,8 +58,20 @@ export function NewInterventionForm() {
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Ej. Incidente zona norte"
+          placeholder="Ej. OP_RAD_1"
         />
+      </div>
+      <div>
+        <Label htmlFor="zone">Zona de la operación</Label>
+        <Input
+          id="zone"
+          value={zone}
+          onChange={(e) => setZone(e.target.value)}
+          placeholder="Calle X, Palma"
+        />
+        <p className="mt-1 text-xs text-muted">
+          Opcional. Al crear se intentará ubicar el mapa en esta dirección.
+        </p>
       </div>
       <div>
         <Label htmlFor="occurredAt">Fecha</Label>

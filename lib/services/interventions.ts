@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import { calculateZones } from "@/domain/zones/calculateZones";
+import { geocodeAddress } from "@/lib/geocoding/nominatim";
 import {
   deleteInterventionById,
   findAllInterventions,
@@ -121,12 +122,17 @@ export async function createIntervention(
   let location: InterventionDoc["location"];
   let zones: InterventionZones | undefined;
 
-  if (input.coordinates) {
+  let coordinates = input.coordinates;
+  if (!coordinates && input.locationLabel?.trim()) {
+    coordinates = (await geocodeAddress(input.locationLabel)) ?? undefined;
+  }
+
+  if (coordinates) {
     location = {
-      point: { type: "Point", coordinates: input.coordinates },
+      point: { type: "Point", coordinates },
       label: input.locationLabel,
     };
-    zones = buildZones(input.coordinates, zoneParams);
+    zones = buildZones(coordinates, zoneParams);
   }
 
   const doc = await insertIntervention({

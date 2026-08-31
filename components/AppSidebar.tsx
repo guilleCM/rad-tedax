@@ -2,11 +2,12 @@
 
 import { useEffect, useId, useState } from "react";
 import Link from "next/link";
-import { LogOut, Moon, Sun, UserPlus, Users, X } from "lucide-react";
+import { LogOut, MapPin, Moon, Sun, UserPlus, Users, X } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import {
   canAccessUserAdmin,
+  canCreateIntervention,
   canCreateParticipantRegistry,
   roleLabel,
 } from "@/lib/services/permissions";
@@ -26,6 +27,7 @@ export function AppSidebar({ open, onClose }: Props) {
   const role = session?.user?.role;
   const [intervinienteOpen, setIntervinienteOpen] = useState(false);
 
+  const showCreateIntervention = role ? canCreateIntervention(role) : false;
   const showInterviniente = role ? canCreateParticipantRegistry(role) : false;
   const showUserAdmin = role ? canAccessUserAdmin(role) : false;
 
@@ -62,11 +64,8 @@ export function AppSidebar({ open, onClose }: Props) {
           aria-labelledby={titleId}
           className="absolute right-0 top-0 flex h-full w-full max-w-sm flex-col border-l border-border bg-card shadow-xl"
         >
-          <div className="flex items-start justify-between border-b border-border px-4 py-4">
+          <div className="flex items-center justify-between border-b border-border px-4 h-14">
             <div>
-              <h2 id={titleId} className="font-semibold text-foreground">
-                Menú
-              </h2>
               {session?.user && (
                 <p className="mt-1 text-sm text-muted">
                   {session.user.name}
@@ -89,16 +88,28 @@ export function AppSidebar({ open, onClose }: Props) {
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 py-4">
-            {showInterviniente && (
+            {(showCreateIntervention || showInterviniente) && (
               <section className="mb-4 space-y-2">
-                <button
-                  type="button"
-                  onClick={() => setIntervinienteOpen(true)}
-                  className="flex w-full items-center gap-3 rounded-md border border-border px-3 py-2.5 text-sm text-foreground hover:bg-surface"
-                >
-                  <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
-                  Crear interviniente
-                </button>
+                {showCreateIntervention && (
+                  <Link
+                    href="/interventions/new"
+                    onClick={onClose}
+                    className="flex w-full items-center gap-3 rounded-md border border-border px-3 py-2.5 text-sm text-foreground hover:bg-surface"
+                  >
+                    <MapPin className="h-4 w-4 shrink-0" aria-hidden />
+                    Crear intervención
+                  </Link>
+                )}
+                {showInterviniente && (
+                  <button
+                    type="button"
+                    onClick={() => setIntervinienteOpen(true)}
+                    className="flex w-full items-center gap-3 rounded-md border border-border px-3 py-2.5 text-sm text-foreground hover:bg-surface"
+                  >
+                    <UserPlus className="h-4 w-4 shrink-0" aria-hidden />
+                    Crear interviniente
+                  </button>
+                )}
               </section>
             )}
 
