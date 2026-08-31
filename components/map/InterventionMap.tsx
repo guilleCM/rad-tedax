@@ -11,22 +11,47 @@ import {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-const OSM_STYLE: StyleSpecification = {
+const STREETS_STYLE: StyleSpecification = {
   version: 8,
   sources: {
-    osm: {
+    streets: {
       type: "raster",
-      tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+      tiles: [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+      ],
       tileSize: 256,
-      attribution: "&copy; OpenStreetMap Contributors",
+      attribution: "Tiles &copy; Esri",
       maxzoom: 19,
     },
   },
   layers: [
     {
-      id: "osm",
+      id: "streets",
       type: "raster",
-      source: "osm",
+      source: "streets",
+    },
+  ],
+};
+
+const SATELLITE_STYLE: StyleSpecification = {
+  version: 8,
+  sources: {
+    satellite: {
+      type: "raster",
+      tiles: [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      ],
+      tileSize: 256,
+      attribution:
+        "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics",
+      maxzoom: 19,
+    },
+  },
+  layers: [
+    {
+      id: "satellite",
+      type: "raster",
+      source: "satellite",
     },
   ],
 };
@@ -40,33 +65,17 @@ type ZoneOverlay = {
   rII: number;
 };
 
-function getMaptilerApiKey() {
-  return process.env.NEXT_PUBLIC_MAPTILER_API_KEY?.trim() || "";
+function styleForBasemap(basemap: BasemapId): StyleSpecification {
+  return basemap === "satellite" ? SATELLITE_STYLE : STREETS_STYLE;
 }
 
-function getStreetsStyle(): string | StyleSpecification {
-  const custom = process.env.NEXT_PUBLIC_MAP_STYLE_URL?.trim();
-  if (custom) return custom;
-
-  const key = getMaptilerApiKey();
-  if (key) {
-    return `https://api.maptiler.com/maps/streets-v2/style.json?key=${encodeURIComponent(key)}`;
-  }
-
-  return OSM_STYLE;
-}
-
-function getSatelliteStyle(): string | null {
-  const key = getMaptilerApiKey();
-  if (!key) return null;
-  return `https://api.maptiler.com/maps/satellite/style.json?key=${encodeURIComponent(key)}`;
-}
-
-function styleForBasemap(basemap: BasemapId): string | StyleSpecification {
-  if (basemap === "satellite") {
-    return getSatelliteStyle() ?? getStreetsStyle();
-  }
-  return getStreetsStyle();
+function lock2DView(map: Map) {
+  map.setPitch(0);
+  map.setBearing(0);
+  map.dragRotate.disable();
+  map.touchZoomRotate.disableRotation();
+  map.touchPitch.disable();
+  map.keyboard.disableRotation();
 }
 
 type Props = {
@@ -170,8 +179,6 @@ export function InterventionMap({
   const [mapError, setMapError] = useState<string | null>(null);
   const [basemap, setBasemap] = useState<BasemapId>("streets");
   const [overlay, setOverlay] = useState<ZoneOverlay | null>(null);
-  const maptilerKey = getMaptilerApiKey();
-  const satelliteAvailable = Boolean(maptilerKey);
 
   useEffect(() => {
     coordinatesRef.current = coordinates;
@@ -201,14 +208,18 @@ export function InterventionMap({
     const container = containerRef.current;
     const map = new Map({
       container,
-      style: getStreetsStyle(),
+      style: styleForBasemap("streets"),
       center: initialCenter,
       zoom: coordinates ? 15 : 6,
       minZoom: 2,
       maxZoom: 19,
+      pitch: 0,
+      maxPitch: 0,
+      bearing: 0,
       attributionControl: {},
     });
 
+    lock2DView(map);
     map.scrollZoom.enable();
     map.dragPan.enable();
     map.touchZoomRotate.enable();
@@ -216,7 +227,10 @@ export function InterventionMap({
     map.keyboard.enable();
     map.getCanvas().style.cursor = "crosshair";
 
-    map.addControl(new NavigationControl({ visualizePitch: false }), "top-right");
+    map.addControl(
+      new NavigationControl({ showCompass: false, visualizePitch: false }),
+      "top-right",
+    );
 
     const refreshOverlay = () => {
       setOverlay(
@@ -236,6 +250,7 @@ export function InterventionMap({
 
     const onStyleReady = (fit: boolean) => {
       styleReadyRef.current = true;
+      lock2DView(map);
       map.getCanvas().style.cursor = "crosshair";
       map.resize();
       refreshOverlay();
@@ -257,14 +272,14 @@ export function InterventionMap({
       onStyleReady(false);
     });
 
-    for (const event of ["move", "zoom", "rotate", "pitch"] as const) {
+    for (const event of ["move", "zoom"] as const) {
       map.on(event, refreshOverlay);
     }
 
     map.on("error", (event) => {
       const message =
         event.error?.message ||
-        "No se pudieron cargar los tiles del mapa. Revisa NEXT_PUBLIC_MAPTILER_API_KEY.";
+        "No se pudieron cargar los tiles del mapa.";
       setMapError(message);
     });
 
@@ -336,7 +351,6 @@ export function InterventionMap({
 
   function selectBasemap(next: BasemapId) {
     if (next === basemap) return;
-    if (next === "satellite" && !satelliteAvailable) return;
 
     const map = mapRef.current;
     if (!map) return;
@@ -400,16 +414,10 @@ export function InterventionMap({
             <button
               type="button"
               onClick={() => selectBasemap("satellite")}
-              disabled={!satelliteAvailable}
-              title={
-                satelliteAvailable
-                  ? "MapTiler Satellite"
-                  : "Configura NEXT_PUBLIC_MAPTILER_API_KEY para usar satélite"
-              }
-              className={`border-l border-slate-200 px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+              className={`border-l border-slate-200 px-3 py-1.5 text-xs font-medium transition-colors ${
                 basemap === "satellite"
                   ? "bg-slate-900 text-white"
-                  : "bg-white text-slate-700 hover:bg-slate-50 disabled:hover:bg-white"
+                  : "bg-white text-slate-700 hover:bg-slate-50"
               }`}
             >
               Satélite

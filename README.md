@@ -7,7 +7,7 @@ PWA para gestionar intervenciones radiológicas: autenticación, CRUD, mapa MapL
 - Next.js 16 (App Router) + TypeScript + Tailwind
 - Auth.js (Credentials, JWT en cookie httpOnly)
 - MongoDB (driver oficial)
-- MapLibre + OpenFreeMap
+- MapLibre + Esri (calles y satélite)
 - Turf.js (`@turf/circle`) para el cálculo de zonas
 - Serwist (PWA)
 
@@ -58,19 +58,7 @@ Abre [http://localhost:3000](http://localhost:3000).
 
 ## Mapa
 
-Con una API key de [MapTiler Cloud](https://cloud.maptiler.com/account/keys/) tienes **Mapa** (Streets) y **Satélite**:
-
-```env
-NEXT_PUBLIC_MAPTILER_API_KEY=YOUR_KEY
-```
-
-Opcional: forzar otro estilo solo para el botón Mapa:
-
-```env
-NEXT_PUBLIC_MAP_STYLE_URL=https://tiles.openfreemap.org/styles/liberty
-```
-
-Sin key MapTiler, el basemap cae a OSM raster (puede fallar en algunos navegadores) y Satélite queda deshabilitado.
+El mapa ofrece dos capas en la propia interfaz: **Mapa** (calles, Esri World Street Map) y **Satélite** (imagen Esri). No requiere variables de entorno.
 
 ## Estructura relevante
 
