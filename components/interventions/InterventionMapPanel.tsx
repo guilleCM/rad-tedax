@@ -298,6 +298,7 @@ export function InterventionMapPanel({
     setToast("Pulsa en el mapa donde quieras situar el punto de medición");
     setMessage(null);
     setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function activateControlPlacement() {
@@ -305,6 +306,7 @@ export function InterventionMapPanel({
     setToast("Pulsa en el mapa donde quieras situar el punto de control");
     setMessage(null);
     setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function save() {
