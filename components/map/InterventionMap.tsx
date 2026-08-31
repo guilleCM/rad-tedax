@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Layers } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { Layers, Search } from "lucide-react";
 import {
   LngLatBounds,
   Map,
@@ -11,6 +11,11 @@ import {
   type StyleSpecification,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import {
+  searchNominatim,
+  type NominatimSearchHit,
+} from "@/lib/geocoding/nominatim-client";
+import { parseLatLng } from "@/lib/map/parseMapQuery";
 
 const STREETS_STYLE: StyleSpecification = {
   version: 8,
@@ -58,6 +63,7 @@ const SATELLITE_STYLE: StyleSpecification = {
 };
 
 type BasemapId = "streets" | "satellite";
+type SearchMode = "address" | "coordinates";
 
 type ZoneOverlay = {
   cx: number;
@@ -171,6 +177,51 @@ function fitToZonesOrPoint(
   });
 }
 
+function easeToPoint(map: Map, lngLat: [number, number]) {
+  map.easeTo({
+    center: lngLat,
+    zoom: Math.max(map.getZoom(), 15),
+    duration: 500,
+  });
+}
+
+function flyToNominatimHit(map: Map, hit: NominatimSearchHit) {
+  const lon = Number.parseFloat(hit.lon);
+  const lat = Number.parseFloat(hit.lat);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+
+  if (hit.boundingbox?.length === 4) {
+    const south = Number.parseFloat(hit.boundingbox[0]);
+    const north = Number.parseFloat(hit.boundingbox[1]);
+    const west = Number.parseFloat(hit.boundingbox[2]);
+    const east = Number.parseFloat(hit.boundingbox[3]);
+    if (
+      Number.isFinite(south) &&
+      Number.isFinite(north) &&
+      Number.isFinite(west) &&
+      Number.isFinite(east)
+    ) {
+      map.fitBounds(
+        [
+          [west, south],
+          [east, north],
+        ],
+        { padding: 48, maxZoom: 17, duration: 500 },
+      );
+      return;
+    }
+  }
+
+  easeToPoint(map, [lon, lat]);
+}
+
+function isAbortError(error: unknown) {
+  return (
+    (error instanceof DOMException || error instanceof Error) &&
+    error.name === "AbortError"
+  );
+}
+
 export function InterventionMap({
   coordinates,
   radiusZoneIMeters,
@@ -190,6 +241,21 @@ export function InterventionMap({
   const [mapError, setMapError] = useState<string | null>(null);
   const [basemap, setBasemap] = useState<BasemapId>("streets");
   const [overlay, setOverlay] = useState<ZoneOverlay | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchMode, setSearchMode] = useState<SearchMode>("address");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchLat, setSearchLat] = useState("");
+  const [searchLng, setSearchLng] = useState("");
+  const [searchHits, setSearchHits] = useState<NominatimSearchHit[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [lastFetchedQuery, setLastFetchedQuery] = useState("");
+  const searchPanelId = useId();
+  const searchInputId = useId();
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const searchLatRef = useRef<HTMLInputElement | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const trimmedSearchQuery = searchQuery.trim();
 
   useEffect(() => {
     coordinatesRef.current = coordinates;
@@ -363,6 +429,88 @@ export function InterventionMap({
     updateOverlayRef.current();
   }, [coordinates, radiusZoneIMeters, radiusZoneIIMeters, basemap]);
 
+  useEffect(() => {
+    if (!searchOpen) return;
+    const id = window.requestAnimationFrame(() => {
+      if (searchMode === "coordinates") {
+        searchLatRef.current?.focus();
+      } else {
+        searchInputRef.current?.focus();
+      }
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [searchOpen, searchMode]);
+
+  function flyToCoordinates(lngLat: [number, number]) {
+    const map = mapRef.current;
+    if (!map) return;
+    easeToPoint(map, lngLat);
+  }
+
+  function flyToHit(hit: NominatimSearchHit) {
+    const map = mapRef.current;
+    if (!map) return;
+    flyToNominatimHit(map, hit);
+  }
+
+  function selectSearchMode(next: SearchMode) {
+    if (next === searchMode) return;
+    searchAbortRef.current?.abort();
+    setSearchMode(next);
+    setSearchHits([]);
+    setSearchError(null);
+    setSearchLoading(false);
+    setLastFetchedQuery("");
+  }
+
+  function submitSearch(event: FormEvent) {
+    event.preventDefault();
+
+    if (searchMode === "coordinates") {
+      const coords = parseLatLng(searchLat, searchLng);
+      if (!coords) {
+        setSearchError("Introduce latitud (-90 a 90) y longitud (-180 a 180)");
+        return;
+      }
+      setSearchError(null);
+      flyToCoordinates(coords);
+      return;
+    }
+
+    if (!trimmedSearchQuery) return;
+
+    if (
+      lastFetchedQuery === trimmedSearchQuery &&
+      searchHits.length > 0 &&
+      !searchError
+    ) {
+      flyToHit(searchHits[0]);
+      return;
+    }
+
+    const controller = new AbortController();
+    searchAbortRef.current?.abort();
+    searchAbortRef.current = controller;
+    setSearchLoading(true);
+    setSearchError(null);
+
+    void searchNominatim(trimmedSearchQuery, controller.signal)
+      .then((hits) => {
+        if (controller.signal.aborted) return;
+        setSearchHits(hits);
+        setLastFetchedQuery(trimmedSearchQuery);
+        setSearchLoading(false);
+        if (hits.length > 0) flyToHit(hits[0]);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || isAbortError(error)) return;
+        setSearchHits([]);
+        setLastFetchedQuery(trimmedSearchQuery);
+        setSearchLoading(false);
+        setSearchError("No se pudo buscar la dirección");
+      });
+  }
+
   function selectBasemap(next: BasemapId) {
     if (next === basemap) return;
 
@@ -408,38 +556,188 @@ export function InterventionMap({
             )}
           </svg>
         )}
-        <div className="pointer-events-none absolute left-3 top-3 z-10">
-          <div
-            className="pointer-events-auto inline-flex items-center overflow-hidden rounded-md border border-border bg-card shadow-sm"
-            role="group"
-            aria-label="Capas del mapa"
-          >
-            <span className="flex items-center border-r border-border px-2 text-muted">
-              <Layers className="h-3.5 w-3.5" aria-hidden />
-            </span>
+        <div className="pointer-events-none absolute left-3 top-3 z-10 flex max-w-[min(100%-1.5rem,22rem)] flex-col items-start gap-2">
+          <div className="flex items-start gap-2">
+            <div
+              className="pointer-events-auto inline-flex items-center overflow-hidden rounded-md border border-border bg-card shadow-sm"
+              role="group"
+              aria-label="Capas del mapa"
+            >
+              <span className="flex items-center border-r border-border px-2 text-muted">
+                <Layers className="h-3.5 w-3.5" aria-hidden />
+              </span>
+              <button
+                type="button"
+                onClick={() => selectBasemap("streets")}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  basemap === "streets"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card text-foreground hover:bg-surface"
+                }`}
+              >
+                Mapa
+              </button>
+              <button
+                type="button"
+                onClick={() => selectBasemap("satellite")}
+                className={`border-l border-border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  basemap === "satellite"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card text-foreground hover:bg-surface"
+                }`}
+              >
+                Satélite
+              </button>
+            </div>
             <button
               type="button"
-              onClick={() => selectBasemap("streets")}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                basemap === "streets"
+              onClick={() => setSearchOpen((open) => !open)}
+              className={`pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-md border border-border shadow-sm ${
+                searchOpen
                   ? "bg-primary text-primary-foreground"
-                  : "bg-card text-foreground hover:bg-surface"
+                  : "bg-card text-muted hover:bg-surface hover:text-foreground"
               }`}
+              aria-expanded={searchOpen}
+              aria-controls={searchOpen ? searchPanelId : undefined}
+              aria-label={searchOpen ? "Cerrar búsqueda" : "Buscar en el mapa"}
             >
-              Mapa
-            </button>
-            <button
-              type="button"
-              onClick={() => selectBasemap("satellite")}
-              className={`border-l border-border px-3 py-1.5 text-xs font-medium transition-colors ${
-                basemap === "satellite"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card text-foreground hover:bg-surface"
-              }`}
-            >
-              Satélite
+              <Search className="h-3.5 w-3.5" aria-hidden />
             </button>
           </div>
+          {searchOpen && (
+            <form
+              id={searchPanelId}
+              onSubmit={submitSearch}
+              className="pointer-events-auto w-full rounded-md border border-border bg-card p-2 shadow-sm"
+            >
+              <fieldset className="mb-1.5">
+                <legend className="sr-only">Tipo de búsqueda</legend>
+                <div className="flex gap-3 text-xs text-foreground">
+                  <label className="inline-flex cursor-pointer items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name="map-search-mode"
+                      value="address"
+                      checked={searchMode === "address"}
+                      onChange={() => selectSearchMode("address")}
+                    />
+                    Dirección
+                  </label>
+                  <label className="inline-flex cursor-pointer items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name="map-search-mode"
+                      value="coordinates"
+                      checked={searchMode === "coordinates"}
+                      onChange={() => selectSearchMode("coordinates")}
+                    />
+                    Coordenadas
+                  </label>
+                </div>
+              </fieldset>
+              {searchMode === "address" ? (
+                <div className="flex gap-1.5">
+                  <input
+                    id={searchInputId}
+                    ref={searchInputRef}
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Calle, municipio"
+                    autoComplete="off"
+                    className="min-w-0 flex-1 rounded-md border border-border bg-card px-2 py-1.5 text-xs text-foreground outline-none ring-ring focus:ring-2"
+                  />
+                  <button
+                    type="submit"
+                    className="shrink-0 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                    disabled={searchLoading || !trimmedSearchQuery}
+                  >
+                    Ir
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-1.5">
+                  <label className="min-w-0 flex-1">
+                    <span className="mb-0.5 block text-[10px] font-medium text-muted">
+                      Lat
+                    </span>
+                    <input
+                      ref={searchLatRef}
+                      type="text"
+                      inputMode="decimal"
+                      value={searchLat}
+                      onChange={(e) => {
+                        setSearchLat(e.target.value);
+                        setSearchError(null);
+                      }}
+                      placeholder="40.4168"
+                      autoComplete="off"
+                      className="w-full rounded-md border border-border bg-card px-2 py-1.5 text-xs text-foreground outline-none ring-ring focus:ring-2"
+                    />
+                  </label>
+                  <label className="min-w-0 flex-1">
+                    <span className="mb-0.5 block text-[10px] font-medium text-muted">
+                      Lng
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={searchLng}
+                      onChange={(e) => {
+                        setSearchLng(e.target.value);
+                        setSearchError(null);
+                      }}
+                      placeholder="-3.7038"
+                      autoComplete="off"
+                      className="w-full rounded-md border border-border bg-card px-2 py-1.5 text-xs text-foreground outline-none ring-ring focus:ring-2"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    className="mt-auto shrink-0 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                    disabled={!searchLat.trim() || !searchLng.trim()}
+                  >
+                    Ir
+                  </button>
+                </div>
+              )}
+              {searchMode === "address" && searchLoading && (
+                <p className="mt-1.5 text-xs text-muted">Buscando…</p>
+              )}
+              {searchError &&
+                (searchMode === "coordinates" ||
+                  lastFetchedQuery === trimmedSearchQuery) && (
+                  <p className="mt-1.5 text-xs text-danger-foreground">
+                    {searchError}
+                  </p>
+                )}
+              {searchMode === "address" &&
+                !searchLoading &&
+                !searchError &&
+                trimmedSearchQuery &&
+                lastFetchedQuery === trimmedSearchQuery &&
+                searchHits.length === 0 && (
+                  <p className="mt-1.5 text-xs text-muted">Sin resultados</p>
+                )}
+              {searchMode === "address" &&
+                lastFetchedQuery === trimmedSearchQuery &&
+                searchHits.length > 0 && (
+                  <ul className="mt-1.5 max-h-40 overflow-y-auto border-t border-border pt-1">
+                    {searchHits.map((hit) => (
+                      <li key={`${hit.lon},${hit.lat},${hit.display_name}`}>
+                        <button
+                          type="button"
+                          onClick={() => flyToHit(hit)}
+                          className="w-full rounded px-1.5 py-1 text-left text-xs text-foreground hover:bg-surface"
+                        >
+                          {hit.display_name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+            </form>
+          )}
         </div>
       </div>
       {mapError && (
