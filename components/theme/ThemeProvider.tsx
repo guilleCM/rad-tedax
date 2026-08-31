@@ -8,7 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { THEME_STORAGE_KEY } from "@/components/theme/theme-script";
+import { DEFAULT_THEME, THEME_STORAGE_KEY } from "@/components/theme/theme-script";
 
 export type Theme = "light" | "dark" | "system";
 
@@ -21,15 +21,15 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function readStoredTheme(): Theme {
-  if (typeof window === "undefined") return "system";
+  if (typeof window === "undefined") return DEFAULT_THEME;
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
   return stored === "light" || stored === "dark" || stored === "system"
     ? stored
-    : "system";
+    : DEFAULT_THEME;
 }
 
 function readResolvedTheme(): "light" | "dark" {
-  if (typeof document === "undefined") return "light";
+  if (typeof document === "undefined") return "dark";
   return document.documentElement.classList.contains("dark") ? "dark" : "light";
 }
 
