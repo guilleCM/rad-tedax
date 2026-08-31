@@ -176,21 +176,26 @@ function fitToZonesOrPoint(
   map: Map,
   coordinates: [number, number] | null,
   radiusII: number,
+  controlPoint?: [number, number] | null,
 ) {
   if (!coordinates) return;
 
-  if (radiusII > 0) {
-    map.fitBounds(boundsAroundPoint(coordinates, radiusII), {
-      padding: 48,
-      maxZoom: 17,
-      duration: 500,
-    });
-    return;
+  const bounds =
+    radiusII > 0
+      ? boundsAroundPoint(coordinates, radiusII)
+      : (() => {
+          const b = new LngLatBounds();
+          b.extend(coordinates);
+          return b;
+        })();
+
+  if (controlPoint) {
+    bounds.extend(controlPoint);
   }
 
-  map.easeTo({
-    center: coordinates,
-    zoom: Math.max(map.getZoom(), 15),
+  map.fitBounds(bounds, {
+    padding: 48,
+    maxZoom: 17,
     duration: 500,
   });
 }
@@ -255,6 +260,7 @@ export function InterventionMap({
   const controlMarkerRef = useRef<Marker | null>(null);
   const styleReadyRef = useRef(false);
   const coordinatesRef = useRef(coordinates);
+  const controlPointRef = useRef(controlPoint);
   const radiusIRef = useRef(radiusZoneIMeters);
   const radiusIIRef = useRef(radiusZoneIIMeters);
   const onSelectRef = useRef(onSelectPoint);
@@ -284,6 +290,10 @@ export function InterventionMap({
   useEffect(() => {
     coordinatesRef.current = coordinates;
   }, [coordinates]);
+
+  useEffect(() => {
+    controlPointRef.current = controlPoint;
+  }, [controlPoint]);
 
   useEffect(() => {
     radiusIRef.current = radiusZoneIMeters;
@@ -380,6 +390,7 @@ export function InterventionMap({
           map,
           coordinatesRef.current,
           radiusIIRef.current,
+          controlPointRef.current,
         );
       }
     };
@@ -464,7 +475,12 @@ export function InterventionMap({
     const isFirstPoint = !hadCoordinatesRef.current;
     hadCoordinatesRef.current = true;
     if (isFirstPoint && styleReadyRef.current) {
-      fitToZonesOrPoint(map, coordinates, radiusIIRef.current);
+      fitToZonesOrPoint(
+        map,
+        coordinates,
+        radiusIIRef.current,
+        controlPointRef.current,
+      );
     }
 
     updateOverlayRef.current();
