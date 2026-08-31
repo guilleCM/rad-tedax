@@ -23,26 +23,35 @@ export function CreateUserForm({ actorRole, onSuccess, onCancel }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const isManager = actorRole === "manager";
+  const isParticipantOnly = !isManager || role === "participant";
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
 
-    const body: Record<string, string> = { name, email, password };
-    if (isManager) body.role = role;
-
-    const res = await fetch("/api/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const res = isParticipantOnly
+      ? await fetch("/api/users/participants", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        })
+      : await fetch("/api/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, email, password, role }),
+        });
 
     const json = await res.json();
     setSaving(false);
 
     if (!res.ok) {
-      setError(json.error?.message ?? "No se pudo crear el usuario");
+      setError(
+        json.error?.message ??
+          (isParticipantOnly
+            ? "No se pudo crear el interviniente"
+            : "No se pudo crear el usuario"),
+      );
       return;
     }
 
@@ -72,31 +81,6 @@ export function CreateUserForm({ actorRole, onSuccess, onCancel }: Props) {
         />
       </div>
 
-      <div>
-        <Label htmlFor="user-email">Email</Label>
-        <Input
-          id="user-email"
-          type="email"
-          autoComplete="off"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-      </div>
-
-      <div>
-        <Label htmlFor="user-password">Contraseña</Label>
-        <Input
-          id="user-password"
-          type="password"
-          autoComplete="new-password"
-          minLength={8}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-      </div>
-
       {isManager && (
         <div>
           <Label htmlFor="user-role">Rol</Label>
@@ -115,9 +99,42 @@ export function CreateUserForm({ actorRole, onSuccess, onCancel }: Props) {
         </div>
       )}
 
+      {!isParticipantOnly && (
+        <>
+          <div>
+            <Label htmlFor="user-email">Email</Label>
+            <Input
+              id="user-email"
+              type="email"
+              autoComplete="off"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="user-password">Contraseña</Label>
+            <Input
+              id="user-password"
+              type="password"
+              autoComplete="new-password"
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+        </>
+      )}
+
       <div className="flex gap-2 pt-1">
         <Button type="submit" disabled={saving}>
-          {saving ? "Creando…" : "Crear usuario"}
+          {saving
+            ? "Creando…"
+            : isParticipantOnly
+              ? "Crear interviniente"
+              : "Crear usuario"}
         </Button>
         {onCancel && (
           <Button type="button" variant="secondary" onClick={onCancel}>

@@ -29,6 +29,10 @@ export function UsersAdminPanel({ actorRole, actorId }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  const isLeader = actorRole === "leader";
+  const showEmailColumn = actorRole === "manager";
+  const createLabel = isLeader ? "Nuevo interviniente" : "Nuevo usuario";
+
   const loadUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -83,13 +87,13 @@ export function UsersAdminPanel({ actorRole, actorId }: Props) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">
-          {actorRole === "leader"
+          {isLeader
             ? "Intervinientes registrados en el sistema."
             : "Usuarios e intervinientes del sistema."}
         </p>
         <Button type="button" onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" aria-hidden />
-          Nuevo usuario
+          {createLabel}
         </Button>
       </div>
 
@@ -107,12 +111,16 @@ export function UsersAdminPanel({ actorRole, actorId }: Props) {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full min-w-[640px] text-left text-sm">
+          <table
+            className={`w-full text-left text-sm ${showEmailColumn ? "min-w-[640px]" : "min-w-[520px]"}`}
+          >
             <thead className="border-b border-border bg-surface text-xs uppercase tracking-wide text-muted">
               <tr>
                 <th className="px-4 py-3 font-medium">Nombre</th>
                 <th className="px-4 py-3 font-medium">Rol</th>
-                <th className="px-4 py-3 font-medium">Email</th>
+                {showEmailColumn && (
+                  <th className="px-4 py-3 font-medium">Email</th>
+                )}
                 <th className="px-4 py-3 font-medium">Creado</th>
                 <th className="px-4 py-3 font-medium">Creado por</th>
                 <th className="px-4 py-3 font-medium" />
@@ -125,7 +133,9 @@ export function UsersAdminPanel({ actorRole, actorId }: Props) {
                     {user.name}
                   </td>
                   <td className="px-4 py-3 text-muted">{roleLabel(user.role)}</td>
-                  <td className="px-4 py-3 text-muted">{user.email ?? "—"}</td>
+                  {showEmailColumn && (
+                    <td className="px-4 py-3 text-muted">{user.email ?? "—"}</td>
+                  )}
                   <td className="px-4 py-3 text-muted">
                     {new Date(user.createdAt).toLocaleString("es-ES")}
                   </td>
@@ -153,7 +163,7 @@ export function UsersAdminPanel({ actorRole, actorId }: Props) {
       <Dialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        title="Nuevo usuario"
+        title={createLabel}
       >
         <CreateUserForm
           actorRole={actorRole}

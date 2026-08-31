@@ -18,7 +18,7 @@ export function AppHeader() {
             href="/"
             className="font-semibold tracking-tight text-foreground"
           >
-            Intervención Radiológica
+            RAD TEDAX
           </Link>
           <div className="flex items-center gap-3 text-sm text-muted">
             {session?.user && (
