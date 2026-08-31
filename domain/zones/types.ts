@@ -4,6 +4,9 @@ export interface ZoneParamsInput {
   formulaVersion: string;
   radiusZoneIMeters: number;
   radiusZoneIIMeters: number;
+  /** Dose-limit metadata; not used by polygon formulas. */
+  limitZoneI?: unknown;
+  limitZoneII?: unknown;
 }
 
 export interface ZoneInput {

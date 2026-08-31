@@ -5,6 +5,7 @@ import {
   isOwner,
 } from "@/lib/services/intervention-access";
 import type { InterventionDoc } from "@/lib/types";
+import { DEFAULT_ZONE_PARAMS } from "@/lib/types";
 
 function makeIntervention(
   ownerId: ObjectId,
@@ -18,11 +19,7 @@ function makeIntervention(
     participantIds,
     status: "draft",
     occurredAt: now,
-    zoneParams: {
-      formulaVersion: "v1-placeholder",
-      radiusZoneIMeters: 100,
-      radiusZoneIIMeters: 300,
-    },
+    zoneParams: DEFAULT_ZONE_PARAMS,
     createdAt: now,
     updatedAt: now,
   };

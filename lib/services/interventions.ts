@@ -46,7 +46,10 @@ function buildZones(
     zoneI: result.zoneI,
     zoneII: result.zoneII,
     computedAt: new Date(),
-    computedFrom: result.computedFrom,
+    computedFrom: {
+      point: result.computedFrom.point,
+      zoneParams,
+    },
   };
 }
 
@@ -64,7 +67,7 @@ export function serializeIntervention(doc: InterventionDoc) {
           label: doc.location.label ?? null,
         }
       : null,
-    zoneParams: doc.zoneParams,
+    zoneParams: { ...DEFAULT_ZONE_PARAMS, ...doc.zoneParams },
     zones: doc.zones
       ? {
           zoneI: doc.zones.zoneI,
@@ -162,7 +165,11 @@ export async function updateIntervention(
     coordinates?: [number, number] | null;
     locationLabel?: string | null;
     zoneParams?: ZoneParams;
-    manualOverrides?: { notes?: string; clearZones?: boolean };
+    manualOverrides?: {
+      notes?: string;
+      clearZones?: boolean;
+      controlPoint?: ManualOverrides["controlPoint"] | null;
+    };
     recalculate?: boolean;
   },
 ) {
@@ -179,8 +186,20 @@ export async function updateIntervention(
   if (input.status !== undefined) patch.status = input.status;
 
   const zoneParams = input.zoneParams
-    ? { ...doc.zoneParams, ...input.zoneParams }
-    : doc.zoneParams;
+    ? {
+        ...DEFAULT_ZONE_PARAMS,
+        ...doc.zoneParams,
+        ...input.zoneParams,
+        limitZoneI:
+          input.zoneParams.limitZoneI ??
+          doc.zoneParams.limitZoneI ??
+          DEFAULT_ZONE_PARAMS.limitZoneI,
+        limitZoneII:
+          input.zoneParams.limitZoneII ??
+          doc.zoneParams.limitZoneII ??
+          DEFAULT_ZONE_PARAMS.limitZoneII,
+      }
+    : { ...DEFAULT_ZONE_PARAMS, ...doc.zoneParams };
   if (input.zoneParams) patch.zoneParams = zoneParams;
 
   let coordinates = doc.location?.point.coordinates;
@@ -219,16 +238,29 @@ export async function updateIntervention(
         zoneI: undefined,
         zoneII: undefined,
         notes: input.manualOverrides.notes ?? doc.manualOverrides?.notes,
+        controlPoint:
+          input.manualOverrides.controlPoint === undefined
+            ? doc.manualOverrides?.controlPoint
+            : input.manualOverrides.controlPoint ?? undefined,
       };
     }
   }
 
-  if (input.manualOverrides?.notes !== undefined) {
+  if (
+    input.manualOverrides?.notes !== undefined ||
+    input.manualOverrides?.controlPoint !== undefined
+  ) {
     const overrides: ManualOverrides = {
       ...(doc.manualOverrides ?? {}),
       ...(patch.manualOverrides ?? {}),
-      notes: input.manualOverrides.notes,
     };
+    if (input.manualOverrides.notes !== undefined) {
+      overrides.notes = input.manualOverrides.notes;
+    }
+    if (input.manualOverrides.controlPoint !== undefined) {
+      overrides.controlPoint =
+        input.manualOverrides.controlPoint ?? undefined;
+    }
     patch.manualOverrides = overrides;
   }
 

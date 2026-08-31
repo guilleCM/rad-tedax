@@ -1,11 +1,27 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Pencil } from "lucide-react";
 import type { ZoneFeature } from "@/domain/zones/types";
 import { Button, Input, Label } from "@/components/ui/forms";
+import { Dialog } from "@/components/ui/Dialog";
+import type { MapPlacementMode } from "@/components/map/InterventionMap";
+import {
+  DEFAULT_LIMIT_ZONE_I,
+  DEFAULT_LIMIT_ZONE_II,
+  type DoseLimitBound,
+  type DoseLimitOp,
+  type DoseUnit,
+  type ZoneIILimit,
+} from "@/lib/types";
+import {
+  DOSE_LIMIT_OPS,
+  DOSE_UNITS,
+  formatZoneILimit,
+  formatZoneIILimit,
+} from "@/lib/zones/formatDoseLimit";
 
 const InterventionMap = dynamic(
   () =>
@@ -31,6 +47,8 @@ type SerializedIntervention = {
     formulaVersion: string;
     radiusZoneIMeters: number;
     radiusZoneIIMeters: number;
+    limitZoneI?: DoseLimitBound;
+    limitZoneII?: ZoneIILimit;
   };
   zones: {
     zoneI: ZoneFeature;
@@ -40,8 +58,129 @@ type SerializedIntervention = {
     zoneI?: ZoneFeature;
     zoneII?: ZoneFeature;
     notes?: string;
+    controlPoint?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
   } | null;
 };
+
+type EditingZone = "I" | "II" | null;
+
+function DoseBoundFields({
+  idPrefix,
+  bound,
+  onChange,
+}: {
+  idPrefix: string;
+  bound: DoseLimitBound;
+  onChange: (next: DoseLimitBound) => void;
+}) {
+  return (
+    <div className="grid grid-cols-[1fr_auto_auto] gap-2">
+      <div>
+        <Label htmlFor={`${idPrefix}-op`}>Operador</Label>
+        <select
+          id={`${idPrefix}-op`}
+          className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none ring-ring focus:ring-2"
+          value={bound.op}
+          onChange={(e) =>
+            onChange({ ...bound, op: e.target.value as DoseLimitOp })
+          }
+        >
+          {DOSE_LIMIT_OPS.map((op) => (
+            <option key={op.value} value={op.value}>
+              {op.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <Label htmlFor={`${idPrefix}-value`}>Valor</Label>
+        <Input
+          id={`${idPrefix}-value`}
+          type="number"
+          min={0}
+          step="any"
+          value={bound.value}
+          onChange={(e) =>
+            onChange({ ...bound, value: Number(e.target.value) })
+          }
+        />
+      </div>
+      <div>
+        <Label htmlFor={`${idPrefix}-unit`}>Unidad</Label>
+        <select
+          id={`${idPrefix}-unit`}
+          className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none ring-ring focus:ring-2"
+          value={bound.unit}
+          onChange={(e) =>
+            onChange({ ...bound, unit: e.target.value as DoseUnit })
+          }
+        >
+          {DOSE_UNITS.map((u) => (
+            <option key={u.value} value={u.value}>
+              {u.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+function ZoneSummaryCard({
+  title,
+  colorClass,
+  limitText,
+  radiusMeters,
+  onEdit,
+  readOnly,
+}: {
+  title: string;
+  colorClass: string;
+  limitText: string;
+  radiusMeters: number;
+  onEdit: () => void;
+  readOnly: boolean;
+}) {
+  return (
+    <div className="rounded-lg bg-surface p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${colorClass}`}
+              aria-hidden
+            />
+            <p className="truncate text-sm font-semibold text-foreground">
+              {title}
+            </p>
+          </div>
+          <div className="mt-2 space-y-0.5 pl-4.5 text-xs text-muted">
+            <p>
+              Límite: <span className="text-foreground/80">{limitText}</span>
+            </p>
+            <p>
+              Radio:{" "}
+              <span className="text-foreground/80">{radiusMeters} m</span>
+            </p>
+          </div>
+        </div>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted hover:bg-surface hover:text-foreground"
+            aria-label={`Editar ${title}`}
+          >
+            <Pencil className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function InterventionMapPanel({
   intervention,
@@ -51,8 +190,12 @@ export function InterventionMapPanel({
   readOnly?: boolean;
 }) {
   const router = useRouter();
+  const notesId = useId();
   const [coordinates, setCoordinates] = useState<[number, number] | null>(
     intervention.location?.point.coordinates ?? null,
+  );
+  const [controlPoint, setControlPoint] = useState<[number, number] | null>(
+    intervention.manualOverrides?.controlPoint?.coordinates ?? null,
   );
   const [radiusI, setRadiusI] = useState(
     intervention.zoneParams.radiusZoneIMeters,
@@ -60,25 +203,113 @@ export function InterventionMapPanel({
   const [radiusII, setRadiusII] = useState(
     intervention.zoneParams.radiusZoneIIMeters,
   );
+  const [limitZoneI, setLimitZoneI] = useState<DoseLimitBound>(
+    intervention.zoneParams.limitZoneI ?? DEFAULT_LIMIT_ZONE_I,
+  );
+  const [limitZoneII, setLimitZoneII] = useState<ZoneIILimit>(
+    intervention.zoneParams.limitZoneII ?? DEFAULT_LIMIT_ZONE_II,
+  );
   const [notes, setNotes] = useState(
     intervention.manualOverrides?.notes ?? "",
   );
+  const [notesOpen, setNotesOpen] = useState(Boolean(notes));
+  const [placementMode, setPlacementMode] =
+    useState<MapPlacementMode>("none");
+  const [toast, setToast] = useState<string | null>(null);
+  const [editingZone, setEditingZone] = useState<EditingZone>(null);
+  const [draftRadius, setDraftRadius] = useState(0);
+  const [draftLimitI, setDraftLimitI] =
+    useState<DoseLimitBound>(DEFAULT_LIMIT_ZONE_I);
+  const [draftLimitII, setDraftLimitII] =
+    useState<ZoneIILimit>(DEFAULT_LIMIT_ZONE_II);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = window.setTimeout(() => setToast(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [toast]);
 
   const onSelectPoint = useCallback(
     (lngLat: [number, number]) => {
       if (readOnly) return;
       setCoordinates(lngLat);
+      setPlacementMode("none");
+      setToast(null);
       setMessage(null);
     },
     [readOnly],
   );
 
+  const onSelectControlPoint = useCallback(
+    (lngLat: [number, number]) => {
+      if (readOnly) return;
+      setControlPoint(lngLat);
+      setPlacementMode("none");
+      setToast(null);
+      setMessage(null);
+    },
+    [readOnly],
+  );
+
+  function startEdit(zone: "I" | "II") {
+    setEditingZone(zone);
+    if (zone === "I") {
+      setDraftRadius(radiusI);
+      setDraftLimitI(limitZoneI);
+    } else {
+      setDraftRadius(radiusII);
+      setDraftLimitII(limitZoneII);
+    }
+  }
+
+  function applyEdit() {
+    if (editingZone === "I") {
+      if (!(draftRadius > 0)) {
+        setError("El radio debe ser positivo");
+        return;
+      }
+      if (draftRadius > radiusII) {
+        setError("El radio de Zona I no puede superar el de Zona II");
+        return;
+      }
+      setRadiusI(draftRadius);
+      setLimitZoneI(draftLimitI);
+    } else if (editingZone === "II") {
+      if (!(draftRadius > 0)) {
+        setError("El radio debe ser positivo");
+        return;
+      }
+      if (draftRadius < radiusI) {
+        setError("El radio de Zona II debe ser mayor o igual al de Zona I");
+        return;
+      }
+      setRadiusII(draftRadius);
+      setLimitZoneII(draftLimitII);
+    }
+    setError(null);
+    setEditingZone(null);
+  }
+
+  function activateMeasurementPlacement() {
+    setPlacementMode("measurement");
+    setToast("Pulsa en el mapa donde quieras situar el punto de medición");
+    setMessage(null);
+    setError(null);
+  }
+
+  function activateControlPlacement() {
+    setPlacementMode("control");
+    setToast("Pulsa en el mapa donde quieras situar el punto de control");
+    setMessage(null);
+    setError(null);
+  }
+
   async function save() {
     if (!coordinates) {
-      setError("Selecciona un punto en el mapa");
+      setError("Selecciona un punto de medición en el mapa");
       return;
     }
     if (radiusII < radiusI) {
@@ -99,8 +330,15 @@ export function InterventionMapPanel({
           formulaVersion: intervention.zoneParams.formulaVersion,
           radiusZoneIMeters: radiusI,
           radiusZoneIIMeters: radiusII,
+          limitZoneI,
+          limitZoneII,
         },
-        manualOverrides: { notes: notes || undefined },
+        manualOverrides: {
+          notes,
+          controlPoint: controlPoint
+            ? { type: "Point", coordinates: controlPoint }
+            : null,
+        },
         recalculate: true,
       }),
     });
@@ -117,37 +355,26 @@ export function InterventionMapPanel({
     router.refresh();
   }
 
-  async function recalculate() {
-    setSaving(true);
-    setError(null);
-    const res = await fetch(
-      `/api/interventions/${intervention.id}/recalculate`,
-      { method: "POST" },
-    );
-    const json = await res.json();
-    setSaving(false);
-    if (!res.ok) {
-      setError(json.error?.message ?? "No se pudo recalcular");
-      return;
-    }
-    if (json.data.location?.point?.coordinates) {
-      setCoordinates(json.data.location.point.coordinates);
-    }
-    setRadiusI(json.data.zoneParams.radiusZoneIMeters);
-    setRadiusII(json.data.zoneParams.radiusZoneIIMeters);
-    setMessage("Zonas recalculadas en servidor");
-    router.refresh();
-  }
-
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-      <div>
+    <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
+      <div className="relative">
         <InterventionMap
           coordinates={coordinates}
+          controlPoint={controlPoint}
           radiusZoneIMeters={radiusI}
           radiusZoneIIMeters={radiusII}
+          placementMode={readOnly ? "none" : placementMode}
           onSelectPoint={onSelectPoint}
+          onSelectControlPoint={onSelectControlPoint}
         />
+        {toast && (
+          <div
+            role="status"
+            className="pointer-events-none absolute left-1/2 top-3 z-20 max-w-[min(90%,28rem)] -translate-x-1/2 rounded-md border border-border bg-card px-3 py-2 text-center text-sm text-foreground shadow-lg"
+          >
+            {toast}
+          </div>
+        )}
       </div>
 
       <aside className="space-y-4 rounded-lg border border-border bg-card p-4">
@@ -159,57 +386,77 @@ export function InterventionMapPanel({
               : "Sin seleccionar"}
           </p>
         </div>
-        <div>
-          <Label htmlFor="radiusI">Radio Zona I (m)</Label>
-          <Input
-            id="radiusI"
-            type="number"
-            min={1}
-            value={radiusI}
-            onChange={(e) => setRadiusI(Number(e.target.value))}
-            disabled={readOnly}
+
+        <div className="space-y-2">
+          <ZoneSummaryCard
+            title="Zona I - Medidas Urgentes"
+            colorClass="bg-red-500"
+            limitText={formatZoneILimit(limitZoneI)}
+            radiusMeters={radiusI}
+            onEdit={() => startEdit("I")}
+            readOnly={readOnly}
+          />
+          <ZoneSummaryCard
+            title="Zona II - Alerta"
+            colorClass="bg-orange-500"
+            limitText={formatZoneIILimit(limitZoneII)}
+            radiusMeters={radiusII}
+            onEdit={() => startEdit("II")}
+            readOnly={readOnly}
           />
         </div>
-        <div>
-          <Label htmlFor="radiusII">Radio Zona II (m)</Label>
-          <Input
-            id="radiusII"
-            type="number"
-            min={1}
-            value={radiusII}
-            onChange={(e) => setRadiusII(Number(e.target.value))}
-            disabled={readOnly}
-          />
-        </div>
-        <div>
-          <Label htmlFor="notes">Notas / ajustes</Label>
-          <Input
-            id="notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Opcional"
-            disabled={readOnly}
-          />
-        </div>
+
+        {!readOnly && (
+          <div className="flex flex-col gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={activateMeasurementPlacement}
+              className={
+                placementMode === "measurement"
+                  ? "ring-2 ring-ring"
+                  : undefined
+              }
+            >
+              Punto de medición
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={activateControlPlacement}
+              className={
+                placementMode === "control" ? "ring-2 ring-ring" : undefined
+              }
+            >
+              Punto de control
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setNotesOpen((open) => !open)}
+              aria-expanded={notesOpen}
+              aria-controls={notesId}
+            >
+              Anotaciones
+            </Button>
+            {notesOpen && (
+              <textarea
+                id={notesId}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Anotaciones adicionales…"
+                rows={4}
+                className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none ring-ring focus:ring-2"
+              />
+            )}
+          </div>
+        )}
 
         {!readOnly && (
           <div className="flex flex-col gap-2">
             <Button type="button" onClick={save} disabled={saving}>
               {saving ? "Guardando…" : "Guardar intervención"}
             </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={recalculate}
-              disabled={saving || !coordinates}
-              title="Vuelve a calcular y guardar Zona I/II en la base de datos a partir del punto y radios ya guardados. No dibuja el mapa."
-            >
-              Recalcular en servidor
-            </Button>
-            <p className="text-xs text-muted">
-              Recalcular actualiza las zonas guardadas en el servidor (BD). El
-              dibujo del mapa usa el punto y radios del panel al instante.
-            </p>
           </div>
         )}
 
@@ -225,19 +472,81 @@ export function InterventionMapPanel({
             {message}
           </p>
         )}
-
-        <div className="space-y-1 text-xs text-muted">
-          <p>
-            <span className="inline-block h-2 w-2 rounded-full bg-red-500" />{" "}
-            Zona I — Medidas Urgentes
-          </p>
-          <p>
-            <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />{" "}
-            Zona II — Alerta
-          </p>
-          <p>Fórmula: {intervention.zoneParams.formulaVersion}</p>
-        </div>
       </aside>
+
+      <Dialog
+        open={editingZone !== null}
+        onClose={() => setEditingZone(null)}
+        title={
+          editingZone === "I"
+            ? "Editar Zona I"
+            : editingZone === "II"
+              ? "Editar Zona II"
+              : "Editar zona"
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="edit-radius">Radio (m)</Label>
+            <Input
+              id="edit-radius"
+              type="number"
+              min={1}
+              value={draftRadius}
+              onChange={(e) => setDraftRadius(Number(e.target.value))}
+            />
+          </div>
+
+          {editingZone === "I" && (
+            <div>
+              <Label>Límite</Label>
+              <DoseBoundFields
+                idPrefix="limit-i"
+                bound={draftLimitI}
+                onChange={setDraftLimitI}
+              />
+            </div>
+          )}
+
+          {editingZone === "II" && (
+            <>
+              <div>
+                <Label>Límite inferior</Label>
+                <DoseBoundFields
+                  idPrefix="limit-ii-lower"
+                  bound={draftLimitII.lower}
+                  onChange={(lower) =>
+                    setDraftLimitII((prev) => ({ ...prev, lower }))
+                  }
+                />
+              </div>
+              <div>
+                <Label>Límite superior</Label>
+                <DoseBoundFields
+                  idPrefix="limit-ii-upper"
+                  bound={draftLimitII.upper}
+                  onChange={(upper) =>
+                    setDraftLimitII((prev) => ({ ...prev, upper }))
+                  }
+                />
+              </div>
+            </>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setEditingZone(null)}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" onClick={applyEdit}>
+              Aplicar
+            </Button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }

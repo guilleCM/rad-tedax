@@ -95,11 +95,29 @@ function createDangerPointMarkerElement(): HTMLImageElement {
   return img;
 }
 
+function createControlPointMarkerElement(): HTMLDivElement {
+  const el = document.createElement("div");
+  el.setAttribute("aria-label", "Punto de control");
+  el.style.width = "28px";
+  el.style.height = "28px";
+  el.style.display = "flex";
+  el.style.alignItems = "center";
+  el.style.justifyContent = "center";
+  el.style.filter = "drop-shadow(0 1px 2px rgba(0,0,0,0.45))";
+  el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>`;
+  return el;
+}
+
+export type MapPlacementMode = "none" | "measurement" | "control";
+
 type Props = {
   coordinates: [number, number] | null;
+  controlPoint?: [number, number] | null;
   radiusZoneIMeters: number;
   radiusZoneIIMeters: number;
+  placementMode?: MapPlacementMode;
   onSelectPoint: (lngLat: [number, number]) => void;
+  onSelectControlPoint?: (lngLat: [number, number]) => void;
 };
 
 /** Offset a lng/lat by meters north (approx. spherical). */
@@ -224,18 +242,24 @@ function isAbortError(error: unknown) {
 
 export function InterventionMap({
   coordinates,
+  controlPoint = null,
   radiusZoneIMeters,
   radiusZoneIIMeters,
+  placementMode = "none",
   onSelectPoint,
+  onSelectControlPoint,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
   const markerRef = useRef<Marker | null>(null);
+  const controlMarkerRef = useRef<Marker | null>(null);
   const styleReadyRef = useRef(false);
   const coordinatesRef = useRef(coordinates);
   const radiusIRef = useRef(radiusZoneIMeters);
   const radiusIIRef = useRef(radiusZoneIIMeters);
   const onSelectRef = useRef(onSelectPoint);
+  const onSelectControlRef = useRef(onSelectControlPoint);
+  const placementModeRef = useRef(placementMode);
   const hadCoordinatesRef = useRef(Boolean(coordinates));
   const updateOverlayRef = useRef<() => void>(() => {});
   const [mapError, setMapError] = useState<string | null>(null);
@@ -273,6 +297,18 @@ export function InterventionMap({
     onSelectRef.current = onSelectPoint;
   }, [onSelectPoint]);
 
+  useEffect(() => {
+    onSelectControlRef.current = onSelectControlPoint;
+  }, [onSelectControlPoint]);
+
+  useEffect(() => {
+    placementModeRef.current = placementMode;
+    const map = mapRef.current;
+    if (!map) return;
+    map.getCanvas().style.cursor =
+      placementMode === "none" ? "" : "crosshair";
+  }, [placementMode]);
+
   const initialCenter = useMemo<[number, number]>(
     () => coordinates ?? [-3.7038, 40.4168],
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -302,7 +338,8 @@ export function InterventionMap({
     map.touchZoomRotate.enable();
     map.doubleClickZoom.enable();
     map.keyboard.enable();
-    map.getCanvas().style.cursor = "crosshair";
+    map.getCanvas().style.cursor =
+      placementModeRef.current === "none" ? "" : "crosshair";
 
     map.addControl(
       new NavigationControl({ showCompass: false, visualizePitch: false }),
@@ -322,13 +359,20 @@ export function InterventionMap({
     updateOverlayRef.current = refreshOverlay;
 
     map.on("click", (e: MapMouseEvent) => {
-      onSelectRef.current([e.lngLat.lng, e.lngLat.lat]);
+      const mode = placementModeRef.current;
+      const lngLat: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+      if (mode === "measurement") {
+        onSelectRef.current(lngLat);
+      } else if (mode === "control") {
+        onSelectControlRef.current?.(lngLat);
+      }
     });
 
     const onStyleReady = (fit: boolean) => {
       styleReadyRef.current = true;
       lock2DView(map);
-      map.getCanvas().style.cursor = "crosshair";
+      map.getCanvas().style.cursor =
+        placementModeRef.current === "none" ? "" : "crosshair";
       map.resize();
       refreshOverlay();
       if (fit && coordinatesRef.current) {
@@ -384,6 +428,8 @@ export function InterventionMap({
       updateOverlayRef.current = () => {};
       markerRef.current?.remove();
       markerRef.current = null;
+      controlMarkerRef.current?.remove();
+      controlMarkerRef.current = null;
       map.remove();
       mapRef.current = null;
     };
@@ -423,6 +469,29 @@ export function InterventionMap({
 
     updateOverlayRef.current();
   }, [coordinates]);
+
+  // Control point marker
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!controlPoint) {
+      controlMarkerRef.current?.remove();
+      controlMarkerRef.current = null;
+      return;
+    }
+
+    if (!controlMarkerRef.current) {
+      controlMarkerRef.current = new Marker({
+        element: createControlPointMarkerElement(),
+        anchor: "bottom",
+      })
+        .setLngLat(controlPoint)
+        .addTo(map);
+    } else {
+      controlMarkerRef.current.setLngLat(controlPoint);
+    }
+  }, [controlPoint]);
 
   // Refresh SVG when radii change from the panel
   useEffect(() => {

@@ -16,6 +16,7 @@ import {
   roleLabel,
 } from "@/lib/services/permissions";
 import type { InterventionDoc, UserDoc } from "@/lib/types";
+import { DEFAULT_ZONE_PARAMS } from "@/lib/types";
 
 function makeIntervention(ownerId: ObjectId): InterventionDoc {
   const now = new Date();
@@ -26,11 +27,7 @@ function makeIntervention(ownerId: ObjectId): InterventionDoc {
     participantIds: [],
     status: "draft",
     occurredAt: now,
-    zoneParams: {
-      formulaVersion: "v1-placeholder",
-      radiusZoneIMeters: 100,
-      radiusZoneIIMeters: 300,
-    },
+    zoneParams: DEFAULT_ZONE_PARAMS,
     createdAt: now,
     updatedAt: now,
   };
