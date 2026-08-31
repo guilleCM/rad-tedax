@@ -19,6 +19,13 @@ export async function interventionsCollection() {
   return getCollection<InterventionDoc>("interventions");
 }
 
+export async function findAllInterventions(): Promise<
+  WithId<InterventionDoc>[]
+> {
+  const col = await interventionsCollection();
+  return col.find({}).sort({ updatedAt: -1 }).toArray();
+}
+
 export async function findInterventionsForUser(
   userId: string,
 ): Promise<WithId<InterventionDoc>[]> {

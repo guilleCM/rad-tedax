@@ -36,6 +36,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             return null;
           }
 
+          if (!user.passwordHash) {
+            console.warn("[auth] account has no password:", parsed.data.email);
+            return null;
+          }
+
           const valid = await bcrypt.compare(
             parsed.data.password,
             user.passwordHash,
@@ -45,13 +50,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             return null;
           }
 
+          if (user.role === "participant") {
+            throw new Error("NO_APP_ACCESS");
+          }
+
           return {
             id: user._id.toString(),
             name: user.name,
-            email: user.email,
+            email: user.email ?? parsed.data.email,
             role: user.role,
           };
         } catch (error) {
+          if (error instanceof Error && error.message === "NO_APP_ACCESS") {
+            throw error;
+          }
           console.error("[auth] DB error during login:", error);
           return null;
         }

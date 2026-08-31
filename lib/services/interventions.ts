@@ -2,24 +2,29 @@ import { ObjectId } from "mongodb";
 import { calculateZones } from "@/domain/zones/calculateZones";
 import {
   deleteInterventionById,
+  findAllInterventions,
   findInterventionById,
-  findInterventionsForUser,
   insertIntervention,
   updateInterventionById,
 } from "@/lib/repositories/interventions";
+import { isOwner } from "@/lib/services/intervention-access";
 import {
-  canAccessIntervention,
-  isOwner,
-} from "@/lib/services/intervention-access";
+  canCreateIntervention,
+  canDeleteIntervention,
+  canListInterventions,
+  canReadIntervention,
+  canUpdateIntervention,
+} from "@/lib/services/permissions";
 import {
   DEFAULT_ZONE_PARAMS,
   type InterventionDoc,
   type InterventionZones,
   type ManualOverrides,
+  type UserRole,
   type ZoneParams,
 } from "@/lib/types";
 
-export { canAccessIntervention, isOwner };
+export { isOwner };
 
 export class AppError extends Error {
   constructor(
@@ -49,7 +54,7 @@ export function serializeIntervention(doc: InterventionDoc) {
     id: doc._id.toString(),
     name: doc.name,
     ownerId: doc.ownerId.toString(),
-    participantIds: doc.participantIds.map((id) => id.toString()),
+    participantIds: (doc.participantIds ?? []).map((id) => id.toString()),
     status: doc.status,
     occurredAt: doc.occurredAt.toISOString(),
     location: doc.location
@@ -73,15 +78,22 @@ export function serializeIntervention(doc: InterventionDoc) {
   };
 }
 
-export async function listInterventions(userId: string) {
-  const docs = await findInterventionsForUser(userId);
+export async function listInterventions(userId: string, role: UserRole) {
+  if (!canListInterventions(role)) {
+    throw new AppError("FORBIDDEN", "No tienes acceso a las intervenciones", 403);
+  }
+  const docs = await findAllInterventions();
   return docs.map(serializeIntervention);
 }
 
-export async function getIntervention(id: string, userId: string) {
+export async function getIntervention(
+  id: string,
+  userId: string,
+  role: UserRole,
+) {
   const doc = await findInterventionById(id);
   if (!doc) throw new AppError("NOT_FOUND", "Intervención no encontrada", 404);
-  if (!canAccessIntervention(doc, userId)) {
+  if (!canReadIntervention(role)) {
     throw new AppError("FORBIDDEN", "No tienes acceso a esta intervención", 403);
   }
   return serializeIntervention(doc);
@@ -89,6 +101,7 @@ export async function getIntervention(id: string, userId: string) {
 
 export async function createIntervention(
   userId: string,
+  role: UserRole,
   input: {
     name: string;
     occurredAt?: Date;
@@ -98,6 +111,10 @@ export async function createIntervention(
     zoneParams?: ZoneParams;
   },
 ) {
+  if (!canCreateIntervention(role)) {
+    throw new AppError("FORBIDDEN", "No puedes crear intervenciones", 403);
+  }
+
   const now = new Date();
   const zoneParams = { ...DEFAULT_ZONE_PARAMS, ...input.zoneParams };
 
@@ -131,6 +148,7 @@ export async function createIntervention(
 export async function updateIntervention(
   id: string,
   userId: string,
+  role: UserRole,
   input: {
     name?: string;
     occurredAt?: Date;
@@ -144,8 +162,8 @@ export async function updateIntervention(
 ) {
   const doc = await findInterventionById(id);
   if (!doc) throw new AppError("NOT_FOUND", "Intervención no encontrada", 404);
-  if (!canAccessIntervention(doc, userId)) {
-    throw new AppError("FORBIDDEN", "No tienes acceso a esta intervención", 403);
+  if (!canUpdateIntervention(role, doc, userId)) {
+    throw new AppError("FORBIDDEN", "No puedes editar esta intervención", 403);
   }
 
   const patch: Partial<InterventionDoc> = {};
@@ -213,18 +231,26 @@ export async function updateIntervention(
   return serializeIntervention(updated);
 }
 
-export async function recalculateIntervention(id: string, userId: string) {
-  return updateIntervention(id, userId, {
+export async function recalculateIntervention(
+  id: string,
+  userId: string,
+  role: UserRole,
+) {
+  return updateIntervention(id, userId, role, {
     recalculate: true,
     manualOverrides: { clearZones: true },
   });
 }
 
-export async function removeIntervention(id: string, userId: string) {
+export async function removeIntervention(
+  id: string,
+  userId: string,
+  role: UserRole,
+) {
   const doc = await findInterventionById(id);
   if (!doc) throw new AppError("NOT_FOUND", "Intervención no encontrada", 404);
-  if (!isOwner(doc, userId)) {
-    throw new AppError("FORBIDDEN", "Solo el propietario puede eliminar", 403);
+  if (!canDeleteIntervention(role)) {
+    throw new AppError("FORBIDDEN", "No puedes eliminar intervenciones", 403);
   }
   const ok = await deleteInterventionById(id);
   if (!ok) throw new AppError("NOT_FOUND", "Intervención no encontrada", 404);

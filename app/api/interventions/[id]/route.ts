@@ -27,7 +27,7 @@ export async function GET(_request: Request, context: RouteContext) {
       );
     }
 
-    const data = await getIntervention(id, session.user.id);
+    const data = await getIntervention(id, session.user.id, session.user.role);
     return NextResponse.json({ data });
   } catch (error) {
     return jsonError(error);
@@ -63,7 +63,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       );
     }
 
-    const data = await updateIntervention(id, session.user.id, {
+    const data = await updateIntervention(id, session.user.id, session.user.role, {
       name: parsed.data.name,
       occurredAt: parsed.data.occurredAt,
       status: parsed.data.status,
@@ -94,7 +94,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
       );
     }
 
-    const data = await removeIntervention(id, session.user.id);
+    const data = await removeIntervention(id, session.user.id, session.user.role);
     return NextResponse.json({ data });
   } catch (error) {
     return jsonError(error);

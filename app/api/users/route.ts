@@ -1,18 +1,15 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { jsonError, unauthorized } from "@/lib/api";
-import { createInterventionSchema } from "@/lib/validations/intervention";
-import {
-  createIntervention,
-  listInterventions,
-} from "@/lib/services/interventions";
+import { createUserSchema } from "@/lib/validations/user";
+import { createUser, listUsers } from "@/lib/services/users";
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user?.id) return unauthorized();
+  if (!session?.user?.id || !session.user.role) return unauthorized();
 
   try {
-    const data = await listInterventions(session.user.id, session.user.role);
+    const data = await listUsers(session.user.role, session.user.id);
     return NextResponse.json({ data });
   } catch (error) {
     return jsonError(error);
@@ -21,11 +18,11 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!session?.user?.id) return unauthorized();
+  if (!session?.user?.id || !session.user.role) return unauthorized();
 
   try {
     const body = await request.json();
-    const parsed = createInterventionSchema.safeParse(body);
+    const parsed = createUserSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         {
@@ -39,15 +36,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const data = await createIntervention(session.user.id, session.user.role, {
-      name: parsed.data.name,
-      occurredAt: parsed.data.occurredAt,
-      status: parsed.data.status,
-      coordinates: parsed.data.coordinates,
-      locationLabel: parsed.data.locationLabel,
-      zoneParams: parsed.data.zoneParams,
-    });
-
+    const data = await createUser(
+      session.user.role,
+      session.user.id,
+      parsed.data,
+    );
     return NextResponse.json({ data }, { status: 201 });
   } catch (error) {
     return jsonError(error);

@@ -3,6 +3,11 @@ import { notFound } from "next/navigation";
 import { Map } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { AppError, getIntervention } from "@/lib/services/interventions";
+import {
+  canDeleteIntervention,
+  canUpdateInterventionByOwner,
+} from "@/lib/services/permissions";
+import { DeleteInterventionButton } from "@/components/interventions/DeleteInterventionButton";
 import { Button } from "@/components/ui/forms";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -12,14 +17,22 @@ export default async function InterventionDetailPage({ params }: PageProps) {
   if (!session?.user?.id) notFound();
 
   const { id } = await params;
+  const role = session.user.role;
 
   let intervention;
   try {
-    intervention = await getIntervention(id, session.user.id);
+    intervention = await getIntervention(id, session.user.id, role);
   } catch (error) {
     if (error instanceof AppError && error.status === 404) notFound();
     throw error;
   }
+
+  const canEdit = canUpdateInterventionByOwner(
+    role,
+    intervention.ownerId,
+    session.user.id,
+  );
+  const canDelete = canDeleteIntervention(role);
 
   return (
     <div className="space-y-6">
@@ -34,12 +47,15 @@ export default async function InterventionDetailPage({ params }: PageProps) {
           <p className="text-sm text-muted">
             {new Date(intervention.occurredAt).toLocaleString("es-ES")} ·{" "}
             {intervention.status}
+            {!canEdit && (
+              <span className="ml-2 text-xs">· Solo lectura</span>
+            )}
           </p>
         </div>
         <Link href={`/interventions/${intervention.id}/map`}>
           <Button type="button">
             <Map className="h-4 w-4" aria-hidden />
-            Abrir mapa
+            {canEdit ? "Abrir mapa" : "Ver mapa"}
           </Button>
         </Link>
       </div>
@@ -86,6 +102,10 @@ export default async function InterventionDetailPage({ params }: PageProps) {
           </div>
         )}
       </dl>
+
+      {canDelete && (
+        <DeleteInterventionButton interventionId={intervention.id} />
+      )}
     </div>
   );
 }

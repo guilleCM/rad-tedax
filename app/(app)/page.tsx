@@ -1,18 +1,21 @@
 import Link from "next/link";
 import { MapPin, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { canCreateIntervention } from "@/lib/services/permissions";
 import { listInterventions } from "@/lib/services/interventions";
 import { Button } from "@/components/ui/forms";
 
 export default async function DashboardPage() {
   const session = await auth();
+  const role = session?.user?.role ?? "participant";
+  const canCreate = canCreateIntervention(role);
 
   let interventions: Awaited<ReturnType<typeof listInterventions>> = [];
   let loadError: string | null = null;
 
   if (session?.user?.id) {
     try {
-      interventions = await listInterventions(session.user.id);
+      interventions = await listInterventions(session.user.id, role);
     } catch {
       loadError =
         "No se pudo conectar con MongoDB. Revisa MONGODB_URI y ejecuta npm run seed.";
@@ -28,12 +31,14 @@ export default async function DashboardPage() {
             Gestiona y localiza intervenciones radiológicas
           </p>
         </div>
-        <Link href="/interventions/new">
-          <Button type="button">
-            <Plus className="h-4 w-4" aria-hidden />
-            Nueva intervención
-          </Button>
-        </Link>
+        {canCreate && (
+          <Link href="/interventions/new">
+            <Button type="button">
+              <Plus className="h-4 w-4" aria-hidden />
+              Nueva intervención
+            </Button>
+          </Link>
+        )}
       </div>
 
       {loadError && (
@@ -46,12 +51,14 @@ export default async function DashboardPage() {
         <div className="rounded-lg border border-dashed border-border bg-card p-10 text-center">
           <MapPin className="mx-auto h-8 w-8 text-muted" aria-hidden />
           <p className="mt-3 text-muted">Aún no hay intervenciones.</p>
-          <Link
-            href="/interventions/new"
-            className="mt-3 inline-block text-sm font-medium text-accent underline"
-          >
-            Crear la primera
-          </Link>
+          {canCreate && (
+            <Link
+              href="/interventions/new"
+              className="mt-3 inline-block text-sm font-medium text-accent underline"
+            >
+              Crear la primera
+            </Link>
+          )}
         </div>
       ) : null}
 

@@ -45,8 +45,10 @@ type SerializedIntervention = {
 
 export function InterventionMapPanel({
   intervention,
+  readOnly = false,
 }: {
   intervention: SerializedIntervention;
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [coordinates, setCoordinates] = useState<[number, number] | null>(
@@ -65,10 +67,14 @@ export function InterventionMapPanel({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const onSelectPoint = useCallback((lngLat: [number, number]) => {
-    setCoordinates(lngLat);
-    setMessage(null);
-  }, []);
+  const onSelectPoint = useCallback(
+    (lngLat: [number, number]) => {
+      if (readOnly) return;
+      setCoordinates(lngLat);
+      setMessage(null);
+    },
+    [readOnly],
+  );
 
   async function save() {
     if (!coordinates) {
@@ -143,8 +149,9 @@ export function InterventionMapPanel({
           onSelectPoint={onSelectPoint}
         />
         <p className="mt-2 text-sm text-muted">
-          Haz clic en el mapa para fijar el centro; se dibujan Zona I y Zona II
-          según los radios del panel.
+          {readOnly
+            ? "Vista de solo lectura del mapa y las zonas."
+            : "Haz clic en el mapa para fijar el centro; se dibujan Zona I y Zona II según los radios del panel."}
         </p>
       </div>
 
@@ -165,6 +172,7 @@ export function InterventionMapPanel({
             min={1}
             value={radiusI}
             onChange={(e) => setRadiusI(Number(e.target.value))}
+            disabled={readOnly}
           />
         </div>
         <div>
@@ -175,6 +183,7 @@ export function InterventionMapPanel({
             min={1}
             value={radiusII}
             onChange={(e) => setRadiusII(Number(e.target.value))}
+            disabled={readOnly}
           />
         </div>
         <div>
@@ -184,27 +193,30 @@ export function InterventionMapPanel({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Opcional"
+            disabled={readOnly}
           />
         </div>
 
-        <div className="flex flex-col gap-2">
-          <Button type="button" onClick={save} disabled={saving}>
-            {saving ? "Guardando…" : "Guardar intervención"}
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={recalculate}
-            disabled={saving || !coordinates}
-            title="Vuelve a calcular y guardar Zona I/II en la base de datos a partir del punto y radios ya guardados. No dibuja el mapa."
-          >
-            Recalcular en servidor
-          </Button>
-          <p className="text-xs text-muted">
-            Recalcular actualiza las zonas guardadas en el servidor (BD). El
-            dibujo del mapa usa el punto y radios del panel al instante.
-          </p>
-        </div>
+        {!readOnly && (
+          <div className="flex flex-col gap-2">
+            <Button type="button" onClick={save} disabled={saving}>
+              {saving ? "Guardando…" : "Guardar intervención"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={recalculate}
+              disabled={saving || !coordinates}
+              title="Vuelve a calcular y guardar Zona I/II en la base de datos a partir del punto y radios ya guardados. No dibuja el mapa."
+            >
+              Recalcular en servidor
+            </Button>
+            <p className="text-xs text-muted">
+              Recalcular actualiza las zonas guardadas en el servidor (BD). El
+              dibujo del mapa usa el punto y radios del panel al instante.
+            </p>
+          </div>
+        )}
 
         {error && (
           <p className="flex items-start gap-2 rounded-md bg-danger px-3 py-2 text-sm text-danger-foreground">

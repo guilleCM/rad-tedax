@@ -29,7 +29,12 @@ export function LoginForm() {
     setLoading(false);
 
     if (result?.error) {
-      setError("Email o contraseña incorrectos");
+      setError(
+        result.error === "NO_APP_ACCESS" ||
+          result.error.includes("NO_APP_ACCESS")
+          ? "Esta cuenta no tiene acceso al sistema"
+          : "Email o contraseña incorrectos",
+      );
       return;
     }
 

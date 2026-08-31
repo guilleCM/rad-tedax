@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { jsonError, unauthorized } from "@/lib/api";
 import { objectIdSchema } from "@/lib/validations/intervention";
-import { recalculateIntervention } from "@/lib/services/interventions";
+import { removeUser } from "@/lib/services/users";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export async function POST(_request: Request, context: RouteContext) {
+export async function DELETE(_request: Request, context: RouteContext) {
   const session = await auth();
-  if (!session?.user?.id) return unauthorized();
+  if (!session?.user?.id || !session.user.role) return unauthorized();
 
   try {
     const { id } = await context.params;
@@ -20,11 +20,7 @@ export async function POST(_request: Request, context: RouteContext) {
       );
     }
 
-    const data = await recalculateIntervention(
-      id,
-      session.user.id,
-      session.user.role,
-    );
+    const data = await removeUser(session.user.role, session.user.id, id);
     return NextResponse.json({ data });
   } catch (error) {
     return jsonError(error);

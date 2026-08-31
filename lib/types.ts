@@ -1,18 +1,20 @@
 import type { ObjectId } from "mongodb";
 import type { Feature, Point, Polygon } from "geojson";
 
-export type UserRole = "manager" | "participant";
+export type UserRole = "manager" | "leader" | "participant";
 
 export type InterventionStatus = "draft" | "active" | "closed";
 
 export interface UserDoc {
   _id: ObjectId;
   name: string;
-  email: string;
-  passwordHash: string;
+  email: string | null;
+  passwordHash: string | null;
   role: UserRole;
-  createdAt: Date;
-  updatedAt: Date;
+  /** Ausente en documentos creados antes del campo obligatorio */
+  createdById?: ObjectId | null;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface ZoneParams {
