@@ -68,7 +68,7 @@ export default async function DashboardPage() {
           {interventions.map((item) => (
             <li key={item.id}>
               <Link
-                href={`/interventions/${item.id}`}
+                href={`/interventions/${item.id}/map`}
                 className="flex flex-col gap-1 px-4 py-4 hover:bg-surface sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>

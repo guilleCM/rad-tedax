@@ -63,6 +63,22 @@ function serializeUserWithCreator(
   };
 }
 
+export async function getInterventionParticipants(participantIds: string[]) {
+  if (participantIds.length === 0) return [];
+
+  const docs = await findUsersByIds(participantIds);
+  const byId = new Map(docs.map((doc) => [doc._id.toString(), doc]));
+
+  return participantIds
+    .map((id) => byId.get(id))
+    .filter((doc): doc is NonNullable<typeof doc> => doc !== undefined)
+    .map((doc) => ({
+      id: doc._id.toString(),
+      name: doc.name,
+      role: doc.role,
+    }));
+}
+
 export async function listUsers(actorRole: UserRole, actorId: string) {
   if (!canListUsers(actorRole)) {
     throw new AppError("FORBIDDEN", "No tienes acceso a usuarios", 403);

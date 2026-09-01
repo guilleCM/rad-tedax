@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 import Link from "next/link";
-import { LogOut, MapPin, Moon, Sun, UserPlus, Users, X } from "lucide-react";
+import { History, LogOut, MapPin, Moon, Sun, UserPlus, Users, X } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import {
@@ -88,7 +88,7 @@ export function AppSidebar({ open, onClose }: Props) {
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 py-4">
-            {(showCreateIntervention || showInterviniente) && (
+            {session?.user && (
               <section className="mb-4 space-y-2">
                 {showCreateIntervention && (
                   <Link
@@ -100,6 +100,14 @@ export function AppSidebar({ open, onClose }: Props) {
                     Crear intervención
                   </Link>
                 )}
+                <Link
+                  href="/"
+                  onClick={onClose}
+                  className="flex w-full items-center gap-3 rounded-md border border-border px-3 py-2.5 text-sm text-foreground hover:bg-surface"
+                >
+                  <History className="h-4 w-4 shrink-0" aria-hidden />
+                  Historial de intervenciones
+                </Link>
                 {showInterviniente && (
                   <button
                     type="button"

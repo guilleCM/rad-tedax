@@ -1,12 +1,14 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { AppError, getIntervention } from "@/lib/services/interventions";
-import { canUpdateInterventionByOwner } from "@/lib/services/permissions";
-import { InterventionMapPanel } from "@/components/interventions/InterventionMapPanel";
+import { getInterventionParticipants } from "@/lib/services/users";
+import { InterventionParticipantsPanel } from "@/components/interventions/InterventionParticipantsPanel";
 
 type PageProps = { params: Promise<{ id: string }> };
 
-export default async function InterventionMapPage({ params }: PageProps) {
+export default async function InterventionParticipantsPage({
+  params,
+}: PageProps) {
   const session = await auth();
   if (!session?.user?.id) notFound();
 
@@ -21,13 +23,9 @@ export default async function InterventionMapPage({ params }: PageProps) {
     throw error;
   }
 
-  const readOnly = !canUpdateInterventionByOwner(
-    role,
-    intervention.ownerId,
-    session.user.id,
+  const participants = await getInterventionParticipants(
+    intervention.participantIds,
   );
 
-  return (
-    <InterventionMapPanel intervention={intervention} readOnly={readOnly} />
-  );
+  return <InterventionParticipantsPanel participants={participants} />;
 }
