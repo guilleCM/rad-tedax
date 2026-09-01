@@ -96,6 +96,7 @@ export function countActiveParticipants(
 
 export function getSerializedParticipantTotals(
   sessions: Array<{
+    startedAt: string;
     endedAt: string | null;
     segments: Array<{
       zone: ActiveZone;
