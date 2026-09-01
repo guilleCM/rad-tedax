@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { InterventionStatusBadge } from "@/components/interventions/InterventionStatusBadge";
 import { useInterventionHeader } from "@/components/interventions/InterventionHeaderContext";
+import { InterventionSaveIndicator } from "@/components/interventions/InterventionSaveIndicator";
 
 function InterventionHeaderTitle() {
   const header = useInterventionHeader();
@@ -54,6 +55,7 @@ export function AppHeader() {
             {!interventionHeader && session?.user && (
               <span className="hidden sm:inline">{session.user.name}</span>
             )}
+            {interventionHeader && <InterventionSaveIndicator />}
             {session?.user && (
               <button
                 type="button"

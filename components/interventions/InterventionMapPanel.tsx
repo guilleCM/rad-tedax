@@ -1,11 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, Pencil, Radiation, Flag, FilePen } from "lucide-react";
+import { AlertCircle, Pencil, Radiation, Flag, FilePen } from "lucide-react";
 import type { ZoneFeature } from "@/domain/zones/types";
 import { FinalizeOperationButton } from "@/components/interventions/FinalizeOperationButton";
+import { useReportInterventionSave } from "@/components/interventions/InterventionHeaderContext";
 import { Button, Input, Label } from "@/components/ui/forms";
 import { Dialog } from "@/components/ui/Dialog";
 import type { MapPlacementMode } from "@/components/map/InterventionMap";
@@ -68,6 +69,43 @@ type SerializedIntervention = {
 };
 
 type EditingZone = "I" | "II" | null;
+
+type MapPersistSnapshot = {
+  coordinates: [number, number] | null;
+  controlPoint: [number, number] | null;
+  radiusI: number;
+  radiusII: number;
+  limitZoneI: DoseLimitBound;
+  limitZoneII: ZoneIILimit;
+  notes: string;
+};
+
+function serializePersistPayload(snapshot: MapPersistSnapshot): string {
+  return JSON.stringify(snapshot);
+}
+
+function buildPersistBody(
+  intervention: SerializedIntervention,
+  snapshot: MapPersistSnapshot,
+) {
+  return {
+    coordinates: snapshot.coordinates,
+    zoneParams: {
+      formulaVersion: intervention.zoneParams.formulaVersion,
+      radiusZoneIMeters: snapshot.radiusI,
+      radiusZoneIIMeters: snapshot.radiusII,
+      limitZoneI: snapshot.limitZoneI,
+      limitZoneII: snapshot.limitZoneII,
+    },
+    manualOverrides: {
+      notes: snapshot.notes,
+      controlPoint: snapshot.controlPoint
+        ? { type: "Point" as const, coordinates: snapshot.controlPoint }
+        : null,
+    },
+    recalculate: true,
+  };
+}
 
 function DoseBoundFields({
   idPrefix,
@@ -194,6 +232,7 @@ export function InterventionMapPanel({
   readOnly?: boolean;
 }) {
   const router = useRouter();
+  const reportSaveState = useReportInterventionSave();
   const notesId = useId();
   const [status, setStatus] = useState(interventionStatus);
   const [prevInterventionStatus, setPrevInterventionStatus] =
@@ -229,9 +268,22 @@ export function InterventionMapPanel({
     useState<DoseLimitBound>(DEFAULT_LIMIT_ZONE_I);
   const [draftLimitII, setDraftLimitII] =
     useState<ZoneIILimit>(DEFAULT_LIMIT_ZONE_II);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const savingRef = useRef(false);
+  const pendingPersistRef = useRef(false);
+  const lastSavedPayloadRef = useRef(
+    serializePersistPayload({
+      coordinates: intervention.location?.point.coordinates ?? null,
+      controlPoint:
+        intervention.manualOverrides?.controlPoint?.coordinates ?? null,
+      radiusI: intervention.zoneParams.radiusZoneIMeters,
+      radiusII: intervention.zoneParams.radiusZoneIIMeters,
+      limitZoneI: intervention.zoneParams.limitZoneI ?? DEFAULT_LIMIT_ZONE_I,
+      limitZoneII: intervention.zoneParams.limitZoneII ?? DEFAULT_LIMIT_ZONE_II,
+      notes: intervention.manualOverrides?.notes ?? "",
+    }),
+  );
 
   if (interventionStatus !== prevInterventionStatus) {
     setPrevInterventionStatus(interventionStatus);
@@ -239,6 +291,105 @@ export function InterventionMapPanel({
   }
 
   const effectiveReadOnly = readOnly || status === "closed";
+
+  const getSnapshot = useCallback(
+    (overrides: Partial<MapPersistSnapshot> = {}): MapPersistSnapshot => ({
+      coordinates,
+      controlPoint,
+      radiusI,
+      radiusII,
+      limitZoneI,
+      limitZoneII,
+      notes,
+      ...overrides,
+    }),
+    [
+      coordinates,
+      controlPoint,
+      radiusI,
+      radiusII,
+      limitZoneI,
+      limitZoneII,
+      notes,
+    ],
+  );
+
+  const persistMapStateRef = useRef<
+    (overrides?: Partial<MapPersistSnapshot>) => Promise<boolean>
+  >(() => Promise.resolve(false));
+
+  const persistMapState = useCallback(
+    async (overrides: Partial<MapPersistSnapshot> = {}): Promise<boolean> => {
+      if (effectiveReadOnly) return false;
+
+      const snapshot = getSnapshot(overrides);
+      const serialized = serializePersistPayload(snapshot);
+
+      if (serialized === lastSavedPayloadRef.current) return true;
+
+      if (!snapshot.coordinates) {
+        setError(
+          "Selecciona un punto de medición para guardar la zonificación",
+        );
+        return false;
+      }
+
+      if (snapshot.radiusII < snapshot.radiusI) {
+        setError("El radio de Zona II debe ser mayor o igual al de Zona I");
+        return false;
+      }
+
+      if (savingRef.current) {
+        pendingPersistRef.current = true;
+        return false;
+      }
+
+      savingRef.current = true;
+      reportSaveState("saving");
+      setError(null);
+
+      const res = await fetch(`/api/interventions/${intervention.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildPersistBody(intervention, snapshot)),
+      });
+
+      const json = await res.json();
+      savingRef.current = false;
+
+      if (!res.ok) {
+        reportSaveState("idle");
+        setError(json.error?.message ?? "No se pudo guardar");
+        if (pendingPersistRef.current) {
+          pendingPersistRef.current = false;
+          void persistMapStateRef.current();
+        }
+        return false;
+      }
+
+      lastSavedPayloadRef.current = serialized;
+      reportSaveState("saved");
+      router.refresh();
+
+      if (pendingPersistRef.current) {
+        pendingPersistRef.current = false;
+        void persistMapStateRef.current();
+      }
+
+      return true;
+    },
+    [
+      effectiveReadOnly,
+      getSnapshot,
+      intervention,
+      reportSaveState,
+      router,
+    ],
+  );
+
+  useEffect(() => {
+    persistMapStateRef.current = persistMapState;
+  }, [persistMapState]);
 
   useEffect(() => {
     if (!toast) return;
@@ -252,9 +403,10 @@ export function InterventionMapPanel({
       setCoordinates(lngLat);
       setPlacementMode("none");
       setToast(null);
-      setMessage(null);
+      setError(null);
+      void persistMapState({ coordinates: lngLat });
     },
-    [effectiveReadOnly],
+    [effectiveReadOnly, persistMapState],
   );
 
   const onSelectControlPoint = useCallback(
@@ -263,9 +415,10 @@ export function InterventionMapPanel({
       setControlPoint(lngLat);
       setPlacementMode("none");
       setToast(null);
-      setMessage(null);
+      setError(null);
+      void persistMapState({ controlPoint: lngLat });
     },
-    [effectiveReadOnly],
+    [effectiveReadOnly, persistMapState],
   );
 
   function startEdit(zone: "I" | "II") {
@@ -291,6 +444,12 @@ export function InterventionMapPanel({
       }
       setRadiusI(draftRadius);
       setLimitZoneI(draftLimitI);
+      setError(null);
+      setEditingZone(null);
+      void persistMapState({
+        radiusI: draftRadius,
+        limitZoneI: draftLimitI,
+      });
     } else if (editingZone === "II") {
       if (!(draftRadius > 0)) {
         setError("El radio debe ser positivo");
@@ -302,15 +461,18 @@ export function InterventionMapPanel({
       }
       setRadiusII(draftRadius);
       setLimitZoneII(draftLimitII);
+      setError(null);
+      setEditingZone(null);
+      void persistMapState({
+        radiusII: draftRadius,
+        limitZoneII: draftLimitII,
+      });
     }
-    setError(null);
-    setEditingZone(null);
   }
 
   function activateMeasurementPlacement() {
     setPlacementMode("measurement");
     setToast("Pulsa en el mapa donde quieras situar el punto de medición");
-    setMessage(null);
     setError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -318,57 +480,8 @@ export function InterventionMapPanel({
   function activateControlPlacement() {
     setPlacementMode("control");
     setToast("Pulsa en el mapa donde quieras situar el punto de control");
-    setMessage(null);
     setError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  async function save() {
-    if (!coordinates) {
-      setError("Selecciona un punto de medición en el mapa");
-      return;
-    }
-    if (radiusII < radiusI) {
-      setError("El radio de Zona II debe ser mayor o igual al de Zona I");
-      return;
-    }
-
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-
-    const res = await fetch(`/api/interventions/${intervention.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        coordinates,
-        zoneParams: {
-          formulaVersion: intervention.zoneParams.formulaVersion,
-          radiusZoneIMeters: radiusI,
-          radiusZoneIIMeters: radiusII,
-          limitZoneI,
-          limitZoneII,
-        },
-        manualOverrides: {
-          notes,
-          controlPoint: controlPoint
-            ? { type: "Point", coordinates: controlPoint }
-            : null,
-        },
-        recalculate: true,
-      }),
-    });
-
-    const json = await res.json();
-    setSaving(false);
-
-    if (!res.ok) {
-      setError(json.error?.message ?? "No se pudo guardar");
-      return;
-    }
-
-    setMessage("Intervención guardada");
-    router.refresh();
   }
 
   return (
@@ -469,6 +582,7 @@ export function InterventionMapPanel({
                 id={notesId}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
+                onBlur={() => void persistMapState()}
                 placeholder="Anotaciones adicionales…"
                 rows={4}
                 className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none ring-ring focus:ring-2"
@@ -477,24 +591,10 @@ export function InterventionMapPanel({
           </div>
         )}
 
-        {!effectiveReadOnly && (
-          <div className="flex flex-col gap-2">
-            <Button type="button" onClick={save} disabled={saving}>
-              {saving ? "Guardando…" : "Guardar intervención"}
-            </Button>
-          </div>
-        )}
-
         {error && (
           <p className="flex items-start gap-2 rounded-md bg-danger px-3 py-2 text-sm text-danger-foreground">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             {error}
-          </p>
-        )}
-        {message && (
-          <p className="flex items-start gap-2 rounded-md bg-success px-3 py-2 text-sm text-success-foreground">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            {message}
           </p>
         )}
       </aside>
@@ -516,7 +616,7 @@ export function InterventionMapPanel({
             <Input
               id="edit-radius"
               type="number"
-              min={1}
+              min={0}
               value={draftRadius}
               onChange={(e) => setDraftRadius(Number(e.target.value))}
             />
