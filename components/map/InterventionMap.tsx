@@ -3,110 +3,30 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { Layers, Search } from "lucide-react";
 import {
-  LngLatBounds,
   Map,
   Marker,
   NavigationControl,
   type MapMouseEvent,
-  type StyleSpecification,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import {
   searchNominatim,
   type NominatimSearchHit,
 } from "@/lib/geocoding/nominatim-client";
+import {
+  computeOverlay,
+  createControlPointMarkerElement,
+  createDangerPointMarkerElement,
+  easeToPoint,
+  fitToZonesOrPoint,
+  lock2DView,
+  styleForBasemap,
+  type BasemapId,
+  type ZoneOverlay,
+} from "@/lib/map/interventionMapShared";
 import { parseLatLng } from "@/lib/map/parseMapQuery";
 
-const STREETS_STYLE: StyleSpecification = {
-  version: 8,
-  sources: {
-    streets: {
-      type: "raster",
-      tiles: [
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
-      ],
-      tileSize: 256,
-      attribution: "Tiles &copy; Esri",
-      maxzoom: 19,
-    },
-  },
-  layers: [
-    {
-      id: "streets",
-      type: "raster",
-      source: "streets",
-    },
-  ],
-};
-
-const SATELLITE_STYLE: StyleSpecification = {
-  version: 8,
-  sources: {
-    satellite: {
-      type: "raster",
-      tiles: [
-        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-      ],
-      tileSize: 256,
-      attribution:
-        "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics",
-      maxzoom: 19,
-    },
-  },
-  layers: [
-    {
-      id: "satellite",
-      type: "raster",
-      source: "satellite",
-    },
-  ],
-};
-
-type BasemapId = "streets" | "satellite";
 type SearchMode = "address" | "coordinates";
-
-type ZoneOverlay = {
-  cx: number;
-  cy: number;
-  rI: number;
-  rII: number;
-};
-
-function styleForBasemap(basemap: BasemapId): StyleSpecification {
-  return basemap === "satellite" ? SATELLITE_STYLE : STREETS_STYLE;
-}
-
-function lock2DView(map: Map) {
-  map.setPitch(0);
-  map.setBearing(0);
-  map.dragRotate.disable();
-  map.touchZoomRotate.disableRotation();
-  map.touchPitch.disable();
-  map.keyboard.disableRotation();
-}
-
-function createDangerPointMarkerElement(): HTMLImageElement {
-  const img = document.createElement("img");
-  img.src = "/danger-point.png";
-  img.alt = "Punto de intervención";
-  img.width = 30;
-  img.height = 30;
-  img.draggable = false;
-  return img;
-}
-
-function createControlPointMarkerElement(): HTMLDivElement {
-  const el = document.createElement("div");
-  el.setAttribute("aria-label", "Punto de control");
-  el.style.width = "28px";
-  el.style.height = "28px";
-  el.style.display = "flex";
-  el.style.alignItems = "center";
-  el.style.justifyContent = "center";
-  el.style.filter = "drop-shadow(0 1px 2px rgba(0,0,0,0.45))";
-  el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="#16a34a" stroke="#14532d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>`;
-  return el;
-}
 
 export type MapPlacementMode = "none" | "measurement" | "control";
 
@@ -119,94 +39,6 @@ type Props = {
   onSelectPoint: (lngLat: [number, number]) => void;
   onSelectControlPoint?: (lngLat: [number, number]) => void;
 };
-
-/** Offset a lng/lat by meters north (approx. spherical). */
-function offsetNorth(
-  center: [number, number],
-  meters: number,
-): [number, number] {
-  const dLat = meters / 111_320;
-  return [center[0], center[1] + dLat];
-}
-
-function metersToPixels(
-  map: Map,
-  center: [number, number],
-  meters: number,
-): number {
-  if (!(meters > 0)) return 0;
-  const p0 = map.project(center);
-  const p1 = map.project(offsetNorth(center, meters));
-  return Math.hypot(p1.x - p0.x, p1.y - p0.y);
-}
-
-function computeOverlay(
-  map: Map,
-  center: [number, number] | null,
-  radiusI: number,
-  radiusII: number,
-): ZoneOverlay | null {
-  if (!center) return null;
-  const projected = map.project(center);
-  return {
-    cx: projected.x,
-    cy: projected.y,
-    rI: metersToPixels(map, center, radiusI),
-    rII: metersToPixels(map, center, radiusII),
-  };
-}
-
-function boundsAroundPoint(
-  center: [number, number],
-  radiusMeters: number,
-): LngLatBounds {
-  const pad = Math.max(radiusMeters, 50);
-  const north = offsetNorth(center, pad);
-  const south = offsetNorth(center, -pad);
-  const metersPerDegLng =
-    111_320 * Math.cos((center[1] * Math.PI) / 180);
-  const dLng = pad / Math.max(metersPerDegLng, 1e-6);
-  const bounds = new LngLatBounds();
-  bounds.extend([center[0] - dLng, south[1]]);
-  bounds.extend([center[0] + dLng, north[1]]);
-  return bounds;
-}
-
-function fitToZonesOrPoint(
-  map: Map,
-  coordinates: [number, number] | null,
-  radiusII: number,
-  controlPoint?: [number, number] | null,
-) {
-  if (!coordinates) return;
-
-  const bounds =
-    radiusII > 0
-      ? boundsAroundPoint(coordinates, radiusII)
-      : (() => {
-          const b = new LngLatBounds();
-          b.extend(coordinates);
-          return b;
-        })();
-
-  if (controlPoint) {
-    bounds.extend(controlPoint);
-  }
-
-  map.fitBounds(bounds, {
-    padding: 48,
-    maxZoom: 17,
-    duration: 500,
-  });
-}
-
-function easeToPoint(map: Map, lngLat: [number, number]) {
-  map.easeTo({
-    center: lngLat,
-    zoom: Math.max(map.getZoom(), 15),
-    duration: 500,
-  });
-}
 
 function flyToNominatimHit(map: Map, hit: NominatimSearchHit) {
   const lon = Number.parseFloat(hit.lon);

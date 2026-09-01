@@ -10,6 +10,10 @@ import {
   formatZoneIILimit,
 } from "@/lib/zones/formatDoseLimit";
 import type { ActiveZone } from "@/lib/types";
+import {
+  MAP_SNAPSHOT_HEIGHT,
+  MAP_SNAPSHOT_WIDTH,
+} from "@/lib/map/interventionMapShared";
 
 const ZONE_LABELS: Record<ActiveZone, string> = {
   I: "Zona I",
@@ -35,6 +39,8 @@ function formatTimeLabel(iso: string): string {
 const PAGE_MARGIN = 16;
 const LINE_HEIGHT = 6;
 const PAGE_HEIGHT = 297;
+const PAGE_WIDTH = 210;
+const CONTENT_WIDTH = PAGE_WIDTH - PAGE_MARGIN * 2;
 
 function slugify(value: string): string {
   return value
@@ -102,7 +108,7 @@ function writeLine(writer: PdfWriter, text: string, options?: { bold?: boolean }
     writer.doc.setFont("helvetica", "normal");
   }
   writer.doc.setFontSize(10);
-  const lines = writer.doc.splitTextToSize(text, 210 - PAGE_MARGIN * 2);
+  const lines = writer.doc.splitTextToSize(text, CONTENT_WIDTH);
   for (const line of lines) {
     ensureSpace(writer);
     writer.doc.text(line, PAGE_MARGIN, writer.y);
@@ -115,9 +121,34 @@ function writeSectionTitle(writer: PdfWriter, title: string) {
   writeLine(writer, title, { bold: true });
 }
 
+function writeMapImage(
+  writer: PdfWriter,
+  mapImageDataUrl: string,
+): void {
+  const imgWidth = CONTENT_WIDTH;
+  const imgHeight = (imgWidth * MAP_SNAPSHOT_HEIGHT) / MAP_SNAPSHOT_WIDTH;
+  const blockHeight = imgHeight + LINE_HEIGHT * 2;
+
+  ensureSpace(writer, blockHeight);
+  writer.doc.addImage(
+    mapImageDataUrl,
+    "JPEG",
+    PAGE_MARGIN,
+    writer.y,
+    imgWidth,
+    imgHeight,
+  );
+  writer.y += imgHeight + 4;
+  writeLine(
+    writer,
+    "Mapa táctico — zonas y puntos al cierre del informe",
+  );
+}
+
 export async function exportOperationReportPdf(
   report: OperationReportSnapshot,
   interventionId: string,
+  options?: { mapImageDataUrl?: string | null },
 ): Promise<void> {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -171,6 +202,10 @@ export async function exportOperationReportPdf(
     }
   } else {
     writeLine(writer, "Sin ubicación registrada.");
+  }
+
+  if (options?.mapImageDataUrl) {
+    writeMapImage(writer, options.mapImageDataUrl);
   }
 
   writeSectionTitle(writer, "Cinturones establecidos");

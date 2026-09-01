@@ -1,8 +1,12 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import type { SerializedOperationParticipant } from "@/components/interventions/operation-participant-types";
 import { InterventionReportView } from "@/components/interventions/InterventionReportView";
+import {
+  InterventionMapSnapshot,
+  type InterventionMapSnapshotHandle,
+} from "@/components/map/InterventionMapSnapshot";
 import { buildOperationReport } from "@/domain/dosimetry/buildOperationReport";
 import { exportOperationReportPdf } from "@/lib/reports/exportOperationReportPdf";
 import type {
@@ -49,6 +53,7 @@ export function InterventionReportPanel({
   intervention,
   canDelete,
 }: Props) {
+  const mapSnapshotRef = useRef<InterventionMapSnapshotHandle>(null);
   const reportInput = useMemo(
     () => ({
       name: intervention.name,
@@ -65,15 +70,35 @@ export function InterventionReportPanel({
   );
 
   const handleExportPdf = useCallback(async () => {
+    const mapImageDataUrl = intervention.location
+      ? (await mapSnapshotRef.current?.capture()) ?? null
+      : null;
     const report = buildOperationReport(reportInput);
-    await exportOperationReportPdf(report, intervention.id);
-  }, [intervention.id, reportInput]);
+    await exportOperationReportPdf(report, intervention.id, {
+      mapImageDataUrl,
+    });
+  }, [intervention.id, intervention.location, reportInput]);
+
+  const mapCoordinates = intervention.location?.point.coordinates ?? null;
 
   return (
-    <InterventionReportView
-      intervention={intervention}
-      canDelete={canDelete}
-      onExportPdf={handleExportPdf}
-    />
+    <>
+      {mapCoordinates && (
+        <InterventionMapSnapshot
+          ref={mapSnapshotRef}
+          coordinates={mapCoordinates}
+          controlPoint={
+            intervention.manualOverrides?.controlPoint?.coordinates ?? null
+          }
+          radiusZoneIMeters={intervention.zoneParams.radiusZoneIMeters}
+          radiusZoneIIMeters={intervention.zoneParams.radiusZoneIIMeters}
+        />
+      )}
+      <InterventionReportView
+        intervention={intervention}
+        canDelete={canDelete}
+        onExportPdf={handleExportPdf}
+      />
+    </>
   );
 }
