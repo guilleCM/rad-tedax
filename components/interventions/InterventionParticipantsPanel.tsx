@@ -11,8 +11,10 @@ import {
 } from "lucide-react";
 import { AddOperationParticipantDialog } from "@/components/interventions/AddOperationParticipantDialog";
 import { usePatchInterventionHeader } from "@/components/interventions/InterventionHeaderContext";
+import { OperationHistoryDialog } from "@/components/interventions/OperationHistoryDialog";
 import { OperationParticipantCard } from "@/components/interventions/OperationParticipantCard";
 import { FinalizeOperationButton } from "@/components/interventions/FinalizeOperationButton";
+import { RemoveOperationParticipantDialog } from "@/components/interventions/RemoveOperationParticipantDialog";
 import type { SerializedOperationParticipant } from "@/components/interventions/operation-participant-types";
 import {
   SummaryStatCard,
@@ -67,6 +69,8 @@ export function InterventionParticipantsPanel({
     useState(initialParticipants);
   const [zoneByUser, setZoneByUser] = useState<Record<string, ActiveZone>>({});
   const [addOpen, setAddOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
   const [editingDose, setEditingDose] = useState(false);
   const [draftDoseValue, setDraftDoseValue] = useState(10);
   const [draftDoseUnit, setDraftDoseUnit] =
@@ -303,23 +307,24 @@ export function InterventionParticipantsPanel({
         <Button
           type="button"
           variant="secondary"
-          disabled
-          title="Próximamente"
           className="w-full"
+          onClick={() => setHistoryOpen(true)}
         >
           <Clock className="h-4 w-4" aria-hidden />
           Ver historial
         </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          disabled
-          title="Próximamente"
-          className="w-full"
-        >
-          <UserRound className="h-4 w-4" aria-hidden />
-          Relevo / Salida
-        </Button>
+        {!effectiveReadOnly && (
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full"
+            disabled={participants.length === 0}
+            onClick={() => setRemoveOpen(true)}
+          >
+            <UserRound className="h-4 w-4" aria-hidden />
+            Relevo / Salida
+          </Button>
+        )}
       </div>
 
       <FinalizeOperationButton
@@ -338,6 +343,27 @@ export function InterventionParticipantsPanel({
         onAdded={(participant) => {
           setParticipants((current) => [...current, participant]);
           setMessage("Interviniente añadido");
+          router.refresh();
+        }}
+      />
+
+      <OperationHistoryDialog
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        participants={participants}
+        now={now}
+      />
+
+      <RemoveOperationParticipantDialog
+        open={removeOpen}
+        onClose={() => setRemoveOpen(false)}
+        interventionId={interventionId}
+        participants={participants}
+        onRemoved={(userId) => {
+          setParticipants((current) =>
+            current.filter((participant) => participant.userId !== userId),
+          );
+          setMessage("Interviniente retirado");
           router.refresh();
         }}
       />

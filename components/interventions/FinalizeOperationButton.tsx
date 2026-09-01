@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Flag } from "lucide-react";
+import { MapPinCheck } from "lucide-react";
 import { usePatchInterventionHeader } from "@/components/interventions/InterventionHeaderContext";
 import { Button } from "@/components/ui/forms";
 import { Dialog } from "@/components/ui/Dialog";
@@ -68,7 +68,7 @@ export function FinalizeOperationButton({
           setOpen(true);
         }}
       >
-        <Flag className="h-4 w-4" aria-hidden />
+        <MapPinCheck className="h-4 w-4" aria-hidden />
         Finalizar operación
       </Button>
 
