@@ -5,6 +5,10 @@ import {
   isParticipantActive,
 } from "@/domain/dosimetry/computeDose";
 import { shouldActivateIntervention } from "@/domain/dosimetry/operationActivation";
+import {
+  closeParticipantActiveSession,
+  stopAllActiveParticipantSessions,
+} from "@/domain/dosimetry/closeActiveSessions";
 import { findInterventionById, updateInterventionById } from "@/lib/repositories/interventions";
 import { findUserById } from "@/lib/repositories/users";
 import { AppError } from "@/lib/services/interventions";
@@ -224,7 +228,7 @@ export async function startParticipantSession(
       : p,
   );
 
-  const activate = shouldActivateIntervention(doc.status, participants);
+  const activate = shouldActivateIntervention(doc.status);
   const updated = await saveParticipants(
     interventionId,
     doc,
@@ -350,27 +354,11 @@ export async function stopParticipantSession(
   }
 
   const now = new Date();
-  const closedSegments = activeSession.segments.map((segment, index) =>
-    index === activeSession.segments.length - 1 && !segment.endedAt
-      ? { ...segment, endedAt: now }
-      : segment,
+  const nextParticipants = participants.map((p) =>
+    p.userId.toString() === userId
+      ? closeParticipantActiveSession(p, zoneParams, now)
+      : p,
   );
-  const totals = computeSessionTotals(closedSegments, zoneParams, now);
-  const closedSession = {
-    ...activeSession,
-    endedAt: now,
-    segments: closedSegments,
-    timeInZoneSeconds: totals.timeInZoneSeconds,
-    accumulatedDoseMsv: totals.accumulatedDoseMsv,
-  };
-
-  const nextParticipants = participants.map((p) => {
-    if (p.userId.toString() !== userId) return p;
-    const sessions = p.sessions.map((session) =>
-      session === activeSession ? closedSession : session,
-    );
-    return { ...p, sessions };
-  });
 
   const updated = await saveParticipants(
     interventionId,

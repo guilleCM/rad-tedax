@@ -182,30 +182,34 @@ export function OperationParticipantCard({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={() => void handlePlayStop()}
-            disabled={readOnly || acting}
-            className={`inline-flex h-8 w-8 items-center justify-center rounded-md border border-border transition-colors ${
-              participant.isActive
-                ? "bg-danger text-danger-foreground hover:opacity-90"
-                : "bg-success text-success-foreground hover:opacity-90"
-            } disabled:opacity-50`}
-            aria-label={participant.isActive ? "Detener" : "Iniciar"}
-            title={participant.isActive ? "Detener" : "Iniciar"}
-          >
-            {participant.isActive ? (
-              <Pause className="h-4 w-4" aria-hidden />
-            ) : (
-              <Play className="h-4 w-4" aria-hidden />
-            )}
-          </button>
-          <ZoneRadioToggle
-            name={`zone-${participant.userId}`}
-            value={displayZone}
-            onChange={(zone) => void handleZoneSelect(zone)}
-            disabled={readOnly || acting}
-          />
+          {!readOnly && (
+            <>
+              <button
+                type="button"
+                onClick={() => void handlePlayStop()}
+                disabled={acting}
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-md border border-border transition-colors ${
+                  participant.isActive
+                    ? "bg-danger text-danger-foreground hover:opacity-90"
+                    : "bg-success text-success-foreground hover:opacity-90"
+                } disabled:opacity-50`}
+                aria-label={participant.isActive ? "Detener" : "Iniciar"}
+                title={participant.isActive ? "Detener" : "Iniciar"}
+              >
+                {participant.isActive ? (
+                  <Pause className="h-4 w-4" aria-hidden />
+                ) : (
+                  <Play className="h-4 w-4" aria-hidden />
+                )}
+              </button>
+              <ZoneRadioToggle
+                name={`zone-${participant.userId}`}
+                value={displayZone}
+                onChange={(zone) => void handleZoneSelect(zone)}
+                disabled={acting}
+              />
+            </>
+          )}
         </div>
       </div>
 

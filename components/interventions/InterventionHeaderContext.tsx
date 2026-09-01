@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -19,6 +20,7 @@ export type InterventionHeaderInfo = {
 type InterventionHeaderContextValue = {
   header: InterventionHeaderInfo | null;
   setHeader: (header: InterventionHeaderInfo | null) => void;
+  patchHeader: (patch: Partial<InterventionHeaderInfo>) => void;
 };
 
 const InterventionHeaderContext =
@@ -30,9 +32,14 @@ export function InterventionHeaderProvider({
   children: React.ReactNode;
 }) {
   const [header, setHeader] = useState<InterventionHeaderInfo | null>(null);
+
+  const patchHeader = useCallback((patch: Partial<InterventionHeaderInfo>) => {
+    setHeader((current) => (current ? { ...current, ...patch } : current));
+  }, []);
+
   const value = useMemo(
-    () => ({ header, setHeader }),
-    [header],
+    () => ({ header, setHeader, patchHeader }),
+    [header, patchHeader],
   );
 
   return (
@@ -45,6 +52,11 @@ export function InterventionHeaderProvider({
 export function useInterventionHeader() {
   const ctx = useContext(InterventionHeaderContext);
   return ctx?.header ?? null;
+}
+
+export function usePatchInterventionHeader() {
+  const ctx = useContext(InterventionHeaderContext);
+  return ctx?.patchHeader ?? (() => {});
 }
 
 export function InterventionHeaderSync({

@@ -4,14 +4,15 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   AlertCircle,
-  CheckCircle2,
   Clock,
   Plus,
   Shield,
   UserRound,
 } from "lucide-react";
 import { AddOperationParticipantDialog } from "@/components/interventions/AddOperationParticipantDialog";
+import { usePatchInterventionHeader } from "@/components/interventions/InterventionHeaderContext";
 import { OperationParticipantCard } from "@/components/interventions/OperationParticipantCard";
+import { FinalizeOperationButton } from "@/components/interventions/FinalizeOperationButton";
 import type { SerializedOperationParticipant } from "@/components/interventions/operation-participant-types";
 import {
   SummaryStatCard,
@@ -57,6 +58,7 @@ export function InterventionParticipantsPanel({
   readOnly = false,
 }: Props) {
   const router = useRouter();
+  const patchHeader = usePatchInterventionHeader();
   const [status, setStatus] = useState(interventionStatus);
   const [prevInterventionStatus, setPrevInterventionStatus] =
     useState(interventionStatus);
@@ -286,7 +288,10 @@ export function InterventionParticipantsPanel({
                 onSessionChange={(updated) =>
                   handleSessionChange(participant.userId, updated)
                 }
-                onInterventionActivated={() => setStatus("active")}
+                onInterventionActivated={() => {
+                  setStatus("active");
+                  patchHeader({ status: "active" });
+                }}
                 onError={setError}
               />
             ))}
@@ -316,6 +321,14 @@ export function InterventionParticipantsPanel({
           Relevo / Salida
         </Button>
       </div>
+
+      <FinalizeOperationButton
+        interventionId={interventionId}
+        status={status}
+        readOnly={effectiveReadOnly}
+        hasActiveSessions={hasActiveSessions}
+        onClosed={() => setStatus("closed")}
+      />
 
       <AddOperationParticipantDialog
         open={addOpen}

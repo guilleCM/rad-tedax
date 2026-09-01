@@ -9,7 +9,10 @@ import {
   updateInterventionById,
 } from "@/lib/repositories/interventions";
 import { isOwner } from "@/lib/services/intervention-access";
-import { serializeOperationParticipants } from "@/lib/services/operationParticipants";
+import {
+  serializeOperationParticipants,
+} from "@/lib/services/operationParticipants";
+import { stopAllActiveParticipantSessions } from "@/domain/dosimetry/closeActiveSessions";
 import {
   canCreateIntervention,
   canDeleteIntervention,
@@ -204,6 +207,35 @@ export async function createIntervention(
   return serializeIntervention(doc);
 }
 
+export async function closeIntervention(
+  id: string,
+  userId: string,
+  role: UserRole,
+) {
+  const doc = await findInterventionById(id);
+  if (!doc) throw new AppError("NOT_FOUND", "Intervención no encontrada", 404);
+  if (!canUpdateIntervention(role, doc, userId)) {
+    throw new AppError("FORBIDDEN", "No puedes editar esta intervención", 403);
+  }
+  if (doc.status === "closed") {
+    throw new AppError("CONFLICT", "La operación ya está cerrada", 409);
+  }
+
+  const zoneParams = { ...DEFAULT_ZONE_PARAMS, ...doc.zoneParams };
+  const participants = doc.operationParticipants ?? [];
+  const stoppedParticipants = stopAllActiveParticipantSessions(
+    participants,
+    zoneParams,
+  );
+
+  const updated = await updateInterventionById(id, {
+    status: "closed",
+    operationParticipants: stoppedParticipants,
+  });
+  if (!updated) throw new AppError("NOT_FOUND", "Intervención no encontrada", 404);
+  return serializeIntervention(updated);
+}
+
 export async function updateIntervention(
   id: string,
   userId: string,
@@ -228,6 +260,18 @@ export async function updateIntervention(
   if (!doc) throw new AppError("NOT_FOUND", "Intervención no encontrada", 404);
   if (!canUpdateIntervention(role, doc, userId)) {
     throw new AppError("FORBIDDEN", "No puedes editar esta intervención", 403);
+  }
+
+  if (input.status === "closed") {
+    return closeIntervention(id, userId, role);
+  }
+
+  if (doc.status === "closed") {
+    throw new AppError(
+      "FORBIDDEN",
+      "La operación está cerrada y no admite cambios",
+      403,
+    );
   }
 
   const patch: Partial<InterventionDoc> = {};

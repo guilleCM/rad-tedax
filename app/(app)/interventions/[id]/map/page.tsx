@@ -28,6 +28,10 @@ export default async function InterventionMapPage({ params }: PageProps) {
   );
 
   return (
-    <InterventionMapPanel intervention={intervention} readOnly={readOnly} />
+    <InterventionMapPanel
+      intervention={intervention}
+      interventionStatus={intervention.status}
+      readOnly={readOnly}
+    />
   );
 }

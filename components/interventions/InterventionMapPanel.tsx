@@ -5,6 +5,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, CheckCircle2, Pencil, Radiation, Flag, FilePen } from "lucide-react";
 import type { ZoneFeature } from "@/domain/zones/types";
+import { FinalizeOperationButton } from "@/components/interventions/FinalizeOperationButton";
 import { Button, Input, Label } from "@/components/ui/forms";
 import { Dialog } from "@/components/ui/Dialog";
 import type { MapPlacementMode } from "@/components/map/InterventionMap";
@@ -14,6 +15,7 @@ import {
   type DoseLimitBound,
   type DoseLimitOp,
   type DoseUnit,
+  type InterventionStatus,
   type ZoneIILimit,
 } from "@/lib/types";
 import {
@@ -184,13 +186,18 @@ function ZoneSummaryCard({
 
 export function InterventionMapPanel({
   intervention,
+  interventionStatus,
   readOnly = false,
 }: {
   intervention: SerializedIntervention;
+  interventionStatus: InterventionStatus;
   readOnly?: boolean;
 }) {
   const router = useRouter();
   const notesId = useId();
+  const [status, setStatus] = useState(interventionStatus);
+  const [prevInterventionStatus, setPrevInterventionStatus] =
+    useState(interventionStatus);
   const [coordinates, setCoordinates] = useState<[number, number] | null>(
     intervention.location?.point.coordinates ?? null,
   );
@@ -226,6 +233,13 @@ export function InterventionMapPanel({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  if (interventionStatus !== prevInterventionStatus) {
+    setPrevInterventionStatus(interventionStatus);
+    setStatus(interventionStatus);
+  }
+
+  const effectiveReadOnly = readOnly || status === "closed";
+
   useEffect(() => {
     if (!toast) return;
     const id = window.setTimeout(() => setToast(null), 4000);
@@ -234,24 +248,24 @@ export function InterventionMapPanel({
 
   const onSelectPoint = useCallback(
     (lngLat: [number, number]) => {
-      if (readOnly) return;
+      if (effectiveReadOnly) return;
       setCoordinates(lngLat);
       setPlacementMode("none");
       setToast(null);
       setMessage(null);
     },
-    [readOnly],
+    [effectiveReadOnly],
   );
 
   const onSelectControlPoint = useCallback(
     (lngLat: [number, number]) => {
-      if (readOnly) return;
+      if (effectiveReadOnly) return;
       setControlPoint(lngLat);
       setPlacementMode("none");
       setToast(null);
       setMessage(null);
     },
-    [readOnly],
+    [effectiveReadOnly],
   );
 
   function startEdit(zone: "I" | "II") {
@@ -358,6 +372,7 @@ export function InterventionMapPanel({
   }
 
   return (
+    <div className="space-y-4">
     <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
       <div className="relative">
         <InterventionMap
@@ -365,7 +380,7 @@ export function InterventionMapPanel({
           controlPoint={controlPoint}
           radiusZoneIMeters={radiusI}
           radiusZoneIIMeters={radiusII}
-          placementMode={readOnly ? "none" : placementMode}
+          placementMode={effectiveReadOnly ? "none" : placementMode}
           onSelectPoint={onSelectPoint}
           onSelectControlPoint={onSelectControlPoint}
         />
@@ -380,13 +395,13 @@ export function InterventionMapPanel({
       </div>
 
       <aside className="space-y-4 rounded-lg border border-border bg-card p-4">
-        <div>
-          <Label>Coordenadas [lng, lat]</Label>
-          <p className="font-mono text-xs text-foreground">
+        <div className="!mb-2">
+          <span className="text-sm font-medium text-foreground mr-2">Coordenadas:</span>
+          <span className="font-mono text-xs text-foreground">
             {coordinates
               ? `${coordinates[0].toFixed(6)}, ${coordinates[1].toFixed(6)}`
-              : "Sin seleccionar"}
-          </p>
+              : "[lng, lat]"}
+          </span>
         </div>
 
         <div className="space-y-2">
@@ -396,7 +411,7 @@ export function InterventionMapPanel({
             limitText={formatZoneILimit(limitZoneI)}
             radiusMeters={radiusI}
             onEdit={() => startEdit("I")}
-            readOnly={readOnly}
+            readOnly={effectiveReadOnly}
           />
           <ZoneSummaryCard
             title="Zona II - Alerta"
@@ -404,11 +419,11 @@ export function InterventionMapPanel({
             limitText={formatZoneIILimit(limitZoneII)}
             radiusMeters={radiusII}
             onEdit={() => startEdit("II")}
-            readOnly={readOnly}
+            readOnly={effectiveReadOnly}
           />
         </div>
 
-        {!readOnly && (
+        {!effectiveReadOnly && (
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
               <Button
@@ -462,7 +477,7 @@ export function InterventionMapPanel({
           </div>
         )}
 
-        {!readOnly && (
+        {!effectiveReadOnly && (
           <div className="flex flex-col gap-2">
             <Button type="button" onClick={save} disabled={saving}>
               {saving ? "Guardando…" : "Guardar intervención"}
@@ -557,6 +572,14 @@ export function InterventionMapPanel({
           </div>
         </div>
       </Dialog>
+    </div>
+
+    <FinalizeOperationButton
+      interventionId={intervention.id}
+      status={status}
+      readOnly={readOnly}
+      onClosed={() => setStatus("closed")}
+    />
     </div>
   );
 }
