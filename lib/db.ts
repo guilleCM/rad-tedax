@@ -1,4 +1,5 @@
 import { MongoClient, Db, Collection, Document } from "mongodb";
+import { attachDatabasePool } from "@vercel/functions";
 
 const uri = process.env.MONGODB_URI;
 
@@ -7,22 +8,26 @@ if (!uri) {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var _mongoClientPromise: Promise<MongoClient> | undefined;
 }
+
+const clientOptions = {
+  maxPoolSize: 10,
+  maxIdleTimeMS: 10_000,
+  serverSelectionTimeoutMS: 10_000,
+};
 
 function createClientPromise(): Promise<MongoClient> {
   if (!uri) {
     return Promise.reject(new Error("MONGODB_URI is not configured"));
   }
-  const client = new MongoClient(uri);
+  const client = new MongoClient(uri, clientOptions);
+  attachDatabasePool(client);
   return client.connect();
 }
 
 const clientPromise: Promise<MongoClient> =
-  process.env.NODE_ENV === "development"
-    ? (global._mongoClientPromise ??= createClientPromise())
-    : createClientPromise();
+  global._mongoClientPromise ?? (global._mongoClientPromise = createClientPromise());
 
 export async function getDb(): Promise<Db> {
   const client = await clientPromise;

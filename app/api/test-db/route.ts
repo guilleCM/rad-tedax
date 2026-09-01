@@ -8,6 +8,9 @@ export async function GET() {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[test-db]", error);
-    return NextResponse.json({ ok: false }, { status: 503 });
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.name : "Unknown" },
+      { status: 503 },
+    );
   }
 }
