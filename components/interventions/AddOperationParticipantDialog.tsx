@@ -31,7 +31,6 @@ export function AddOperationParticipantDialog({
   onAdded,
 }: Props) {
   const [users, setUsers] = useState<RegistryUser[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [team, setTeam] = useState<OperationTeam>("search");
@@ -39,30 +38,35 @@ export function AddOperationParticipantDialog({
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  async function loadUsers() {
-    if (loaded || loadingUsers) return;
-    setLoadingUsers(true);
-    setError(null);
-    const res = await fetch("/api/users");
-    const json = await res.json();
-    setLoadingUsers(false);
-    if (!res.ok) {
-      setError(json.error?.message ?? "No se pudieron cargar intervinientes");
-      return;
-    }
-    setUsers(
-      (json.data as RegistryUser[]).filter((user) => user.role === "participant"),
-    );
-    setLoaded(true);
-  }
-
   useEffect(() => {
-    if (!open || loaded || loadingUsers) return;
-    void loadUsers();
-  }, [open, loaded, loadingUsers]);
+    if (!open || loaded) return;
 
-  const excluded = new Set(excludedUserIds);
+    let cancelled = false;
+
+    (async () => {
+      const res = await fetch("/api/users");
+      const json = await res.json();
+      if (cancelled) return;
+
+      if (!res.ok) {
+        setError(json.error?.message ?? "No se pudieron cargar intervinientes");
+        return;
+      }
+
+      setUsers(
+        (json.data as RegistryUser[]).filter((user) => user.role === "participant"),
+      );
+      setLoaded(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, loaded]);
+
+  const loadingUsers = open && !loaded;
   const filtered = useMemo(() => {
+    const excluded = new Set(excludedUserIds);
     const q = query.trim().toLowerCase();
     return users
       .filter((user) => !excluded.has(user.id))

@@ -21,29 +21,8 @@ import {
   dosePercentOfLimit,
   formatAccumulatedDoseMsv,
 } from "@/lib/dosimetry/formatOperationDose";
+import { doseRiskLabel } from "@/lib/dosimetry/riskLevel";
 import type { ActiveZone, OperationDosimetry } from "@/lib/types";
-
-function riskLabel(percent: number): {
-  text: string;
-  className: string;
-} {
-  if (percent >= 100) {
-    return {
-      text: "ALTO",
-      className: "bg-danger text-danger-foreground",
-    };
-  }
-  if (percent >= 80) {
-    return {
-      text: "MEDIO",
-      className: "bg-warning text-warning-foreground",
-    };
-  }
-  return {
-    text: "BAJO",
-    className: "bg-success text-success-foreground",
-  };
-}
 
 function formatRate(
   zone: ActiveZone,
@@ -97,7 +76,7 @@ export function OperationParticipantCard({
     maxOperationDose.value,
     maxOperationDose.unit,
   );
-  const risk = riskLabel(percent);
+  const risk = doseRiskLabel(percent);
   const displayZone = selectedZone;
   const hasMetrics =
     participant.isActive || totals.timeInZoneSeconds > 0;

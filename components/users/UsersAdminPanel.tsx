@@ -49,8 +49,27 @@ export function UsersAdminPanel({ actorRole, actorId }: Props) {
   }, []);
 
   useEffect(() => {
-    void loadUsers();
-  }, [loadUsers]);
+    let cancelled = false;
+
+    (async () => {
+      const res = await fetch("/api/users");
+      const json = await res.json();
+      if (cancelled) return;
+
+      if (!res.ok) {
+        setError(json.error?.message ?? "No se pudo cargar la lista");
+        setLoading(false);
+        return;
+      }
+
+      setUsers(json.data);
+      setLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function onDelete(user: SerializedUser) {
     if (

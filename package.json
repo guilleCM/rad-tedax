@@ -17,6 +17,7 @@
     "@turf/circle": "^7.4.0",
     "@turf/helpers": "^7.4.0",
     "bcryptjs": "^3.0.3",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.38.0",
     "maplibre-gl": "^6.6.0",
     "mongodb": "^7.6.0",
