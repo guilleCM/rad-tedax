@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, Pencil } from "lucide-react";
+import { AlertCircle, CheckCircle2, Pencil, Radiation, Flag, FilePen } from "lucide-react";
 import type { ZoneFeature } from "@/domain/zones/types";
 import { Button, Input, Label } from "@/components/ui/forms";
 import { Dialog } from "@/components/ui/Dialog";
@@ -421,6 +421,7 @@ export function InterventionMapPanel({
                     : "flex-1"
                 }
               >
+                <Radiation className="min-h-4 min-w-4" />
                 Punto de medición
               </Button>
               <Button
@@ -433,6 +434,7 @@ export function InterventionMapPanel({
                     : "flex-1"
                 }
               >
+                <Flag className="min-h-4 min-w-4" />
                 Punto de control
               </Button>
             </div>
@@ -444,6 +446,7 @@ export function InterventionMapPanel({
               aria-expanded={notesOpen}
               aria-controls={notesId}
             >
+              <FilePen className="min-h-4 min-w-4" />
               Anotaciones
             </Button>
             {notesOpen && (
