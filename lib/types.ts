@@ -69,6 +69,17 @@ export interface ManualOverrides {
   };
 }
 
+export type AccumulatedDoseUnit = "mSv" | "uSv";
+
+export interface OperationDosimetry {
+  activeParticipants: number;
+  totalParticipants: number;
+  maxOperationDose: {
+    value: number;
+    unit: AccumulatedDoseUnit;
+  };
+}
+
 export interface InterventionDoc {
   _id: ObjectId;
   name: string;
@@ -86,6 +97,7 @@ export interface InterventionDoc {
   zoneParams: ZoneParams;
   zones?: InterventionZones;
   manualOverrides?: ManualOverrides;
+  operationDosimetry?: OperationDosimetry;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -107,4 +119,10 @@ export const DEFAULT_ZONE_PARAMS: ZoneParams = {
   radiusZoneIIMeters: 300,
   limitZoneI: DEFAULT_LIMIT_ZONE_I,
   limitZoneII: DEFAULT_LIMIT_ZONE_II,
+};
+
+export const DEFAULT_OPERATION_DOSIMETRY: OperationDosimetry = {
+  activeParticipants: 0,
+  totalParticipants: 4,
+  maxOperationDose: { value: 10, unit: "mSv" },
 };

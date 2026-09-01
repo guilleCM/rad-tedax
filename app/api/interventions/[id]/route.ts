@@ -71,6 +71,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       locationLabel: parsed.data.locationLabel,
       zoneParams: parsed.data.zoneParams,
       manualOverrides: parsed.data.manualOverrides,
+      operationDosimetry: parsed.data.operationDosimetry,
       recalculate: parsed.data.recalculate,
     });
 

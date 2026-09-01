@@ -195,6 +195,26 @@ Definido en `lib/types.ts`.
 - Nuevas fórmulas de zona: implementar en `domain/zones/formulas/` y enrutar por `formulaVersion` en `calculateZones.ts`.
 - No añadir registro público; usuarios vía `npm run seed` o panel admin.
 
+### React (componentes cliente)
+
+- **No sincronizar props con estado local en `useEffect`**. ESLint (React 19) rechaza `useEffect(() => { setState(prop) }, [prop])` porque provoca renders en cascada.
+- **Alternativas** (en orden de preferencia):
+  1. Derivar el valor directamente de la prop si no hace falta estado local.
+  2. Ajustar el estado durante el render con una prop “prev” (ver `InterventionParticipantsPanel.tsx`):
+
+```tsx
+const [value, setValue] = useState(initialValue);
+const [prevInitial, setPrevInitial] = useState(initialValue);
+
+if (initialValue !== prevInitial) {
+  setPrevInitial(initialValue);
+  setValue(initialValue);
+}
+```
+
+  3. Forzar remount con `key` en el padre si todo el estado del componente debe resetearse.
+- **`useEffect` sí** para suscripciones externas, DOM, timers o fetch — no para espejar props en state.
+
 ## UX y diseño
 
 - PWA móvil-first, `display: standalone`, tema oscuro por defecto (`#071c35`).

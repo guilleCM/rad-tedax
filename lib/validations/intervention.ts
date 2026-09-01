@@ -38,6 +38,21 @@ export const zoneParamsSchema = z
     message: "radiusZoneIIMeters must be >= radiusZoneIMeters",
   });
 
+const accumulatedDoseUnitSchema = z.enum(["mSv", "uSv"]);
+
+export const operationDosimetrySchema = z
+  .object({
+    activeParticipants: z.number().int().min(0).max(12),
+    totalParticipants: z.number().int().min(0).max(12),
+    maxOperationDose: z.object({
+      value: z.number().positive(),
+      unit: accumulatedDoseUnitSchema,
+    }),
+  })
+  .refine((d) => d.activeParticipants <= d.totalParticipants, {
+    message: "activeParticipants must be <= totalParticipants",
+  });
+
 export const createInterventionSchema = z.object({
   name: z.string().trim().min(1).max(200),
   occurredAt: z.coerce.date().optional(),
@@ -67,6 +82,7 @@ export const updateInterventionSchema = z.object({
         .optional(),
     })
     .optional(),
+  operationDosimetry: operationDosimetrySchema.optional(),
   recalculate: z.boolean().optional(),
 });
 

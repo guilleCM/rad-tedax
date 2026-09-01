@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { AppError, getIntervention } from "@/lib/services/interventions";
 import { getInterventionParticipants } from "@/lib/services/users";
+import { canUpdateInterventionByOwner } from "@/lib/services/permissions";
 import { InterventionParticipantsPanel } from "@/components/interventions/InterventionParticipantsPanel";
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -27,5 +28,18 @@ export default async function InterventionParticipantsPage({
     intervention.participantIds,
   );
 
-  return <InterventionParticipantsPanel participants={participants} />;
+  const readOnly = !canUpdateInterventionByOwner(
+    role,
+    intervention.ownerId,
+    session.user.id,
+  );
+
+  return (
+    <InterventionParticipantsPanel
+      interventionId={intervention.id}
+      operationDosimetry={intervention.operationDosimetry}
+      participants={participants}
+      readOnly={readOnly}
+    />
+  );
 }

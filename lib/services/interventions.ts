@@ -17,10 +17,12 @@ import {
   canUpdateIntervention,
 } from "@/lib/services/permissions";
 import {
+  DEFAULT_OPERATION_DOSIMETRY,
   DEFAULT_ZONE_PARAMS,
   type InterventionDoc,
   type InterventionZones,
   type ManualOverrides,
+  type OperationDosimetry,
   type UserRole,
   type ZoneParams,
 } from "@/lib/types";
@@ -77,6 +79,14 @@ export function serializeIntervention(doc: InterventionDoc) {
         }
       : null,
     manualOverrides: doc.manualOverrides ?? null,
+    operationDosimetry: {
+      ...DEFAULT_OPERATION_DOSIMETRY,
+      ...doc.operationDosimetry,
+      maxOperationDose: {
+        ...DEFAULT_OPERATION_DOSIMETRY.maxOperationDose,
+        ...doc.operationDosimetry?.maxOperationDose,
+      },
+    },
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
@@ -147,6 +157,7 @@ export async function createIntervention(
     location,
     zoneParams,
     zones,
+    operationDosimetry: DEFAULT_OPERATION_DOSIMETRY,
     createdAt: now,
     updatedAt: now,
   });
@@ -170,6 +181,7 @@ export async function updateIntervention(
       clearZones?: boolean;
       controlPoint?: ManualOverrides["controlPoint"] | null;
     };
+    operationDosimetry?: OperationDosimetry;
     recalculate?: boolean;
   },
 ) {
@@ -201,6 +213,19 @@ export async function updateIntervention(
       }
     : { ...DEFAULT_ZONE_PARAMS, ...doc.zoneParams };
   if (input.zoneParams) patch.zoneParams = zoneParams;
+
+  if (input.operationDosimetry) {
+    patch.operationDosimetry = {
+      ...DEFAULT_OPERATION_DOSIMETRY,
+      ...doc.operationDosimetry,
+      ...input.operationDosimetry,
+      maxOperationDose: {
+        ...DEFAULT_OPERATION_DOSIMETRY.maxOperationDose,
+        ...doc.operationDosimetry?.maxOperationDose,
+        ...input.operationDosimetry.maxOperationDose,
+      },
+    };
+  }
 
   let coordinates = doc.location?.point.coordinates;
   let locationLabel = doc.location?.label;
