@@ -119,8 +119,14 @@ export function InterventionParticipantsPanel({
 
   const effectiveReadOnly = readOnly || status === "closed";
 
-  function getSelectedZone(userId: string): ActiveZone {
-    return zoneByUser[userId] ?? "II";
+  function getSelectedZone(participant: SerializedOperationParticipant): ActiveZone {
+    if (zoneByUser[participant.userId]) {
+      return zoneByUser[participant.userId];
+    }
+    if (participant.isActive && participant.activeZone) {
+      return participant.activeZone;
+    }
+    return "II";
   }
 
   function openDoseDialog() {
@@ -270,7 +276,7 @@ export function InterventionParticipantsPanel({
                 interventionId={interventionId}
                 maxOperationDose={dosimetry.maxOperationDose}
                 readOnly={effectiveReadOnly}
-                selectedZone={getSelectedZone(participant.userId)}
+                selectedZone={getSelectedZone(participant)}
                 onZoneChange={(zone) =>
                   setZoneByUser((current) => ({
                     ...current,

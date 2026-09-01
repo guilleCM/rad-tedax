@@ -56,6 +56,25 @@ describe("computeSessionTotals", () => {
     expect(totals.timeInZoneSeconds).toBe(7200);
     expect(totals.accumulatedDoseMsv).toBeCloseTo(5.1, 5);
   });
+
+  it("recalculates dose after mid-session zone change from II to I", () => {
+    const startedAt = new Date("2026-01-01T10:00:00Z");
+    const zoneChangeAt = new Date("2026-01-01T10:30:00Z");
+    const now = new Date("2026-01-01T11:00:00Z");
+
+    const totals = computeSessionTotals(
+      [
+        { zone: "II", startedAt, endedAt: zoneChangeAt },
+        { zone: "I", startedAt: zoneChangeAt },
+      ],
+      DEFAULT_ZONE_PARAMS,
+      now,
+    );
+
+    expect(totals.timeInZoneSeconds).toBe(3600);
+    // 30 min @ 0.1 mSv/h + 30 min @ 5 mSv/h = 0.05 + 2.5 mSv
+    expect(totals.accumulatedDoseMsv).toBeCloseTo(2.55, 5);
+  });
 });
 
 describe("isParticipantActive", () => {

@@ -102,9 +102,7 @@ export function OperationParticipantCard({
     maxOperationDose.unit,
   );
   const risk = riskLabel(percent);
-  const displayZone = participant.isActive
-    ? participant.activeZone ?? selectedZone
-    : selectedZone;
+  const displayZone = selectedZone;
   const hasMetrics =
     participant.isActive || totals.timeInZoneSeconds > 0;
 
@@ -141,8 +139,11 @@ export function OperationParticipantCard({
   }
 
   async function handleZoneSelect(zone: ActiveZone) {
+    const currentZone = participant.isActive
+      ? (participant.activeZone ?? selectedZone)
+      : selectedZone;
     onZoneChange(zone);
-    if (!participant.isActive || readOnly || acting || zone === displayZone) {
+    if (!participant.isActive || readOnly || acting || zone === currentZone) {
       return;
     }
 
@@ -167,7 +168,7 @@ export function OperationParticipantCard({
   }
 
   return (
-    <li className="rounded-lg border border-border bg-card p-4">
+    <li className="rounded-lg border border-border bg-card p-2">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-start gap-3">
           <ParticipantAvatar name={participant.name} />
