@@ -41,7 +41,6 @@ export default async function InterventionParticipantsPage({
       interventionId={intervention.id}
       interventionStatus={intervention.status}
       operationDosimetry={intervention.operationDosimetry}
-      zoneParams={intervention.zoneParams}
       operationParticipants={intervention.operationParticipants}
       readOnly={readOnly}
     />

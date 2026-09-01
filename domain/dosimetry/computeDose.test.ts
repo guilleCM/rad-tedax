@@ -5,6 +5,7 @@ import {
   doseRateMsvPerHour,
   doseUnitToMsvPerHour,
   getParticipantTotals,
+  getSerializedParticipantTotals,
   isParticipantActive,
 } from "./computeDose";
 import { DEFAULT_ZONE_PARAMS } from "@/lib/types";
@@ -135,5 +136,63 @@ describe("getParticipantTotals", () => {
     const totals = getParticipantTotals(participant, DEFAULT_ZONE_PARAMS, now);
     expect(totals.timeInZoneSeconds).toBe(3600 + 5400);
     expect(totals.accumulatedDoseMsv).toBeCloseTo(0.1 + 7.5, 5);
+  });
+});
+
+describe("getSerializedParticipantTotals live clock", () => {
+  it("accumulates dose when now matches an active session", () => {
+    const startedAt = new Date("2026-01-01T12:00:00Z");
+    const now = new Date("2026-01-01T12:01:00Z");
+
+    const totals = getSerializedParticipantTotals(
+      [
+        {
+          startedAt: startedAt.toISOString(),
+          endedAt: null,
+          timeInZoneSeconds: 0,
+          accumulatedDoseMsv: 0,
+          segments: [
+            {
+              zone: "I",
+              startedAt: startedAt.toISOString(),
+              endedAt: null,
+            },
+          ],
+        },
+      ],
+      DEFAULT_ZONE_PARAMS,
+      now,
+    );
+
+    expect(totals.timeInZoneSeconds).toBe(60);
+    expect(totals.accumulatedDoseMsv).toBeCloseTo(5 / 60, 5);
+  });
+
+  it("returns zero when now is stale (before session start)", () => {
+    const staleNow = new Date("2026-01-01T10:00:00Z");
+    const startedAt = new Date("2026-01-01T12:00:00Z");
+
+    const totals = getSerializedParticipantTotals(
+      [
+        {
+          startedAt: startedAt.toISOString(),
+          endedAt: null,
+          timeInZoneSeconds: 0,
+          accumulatedDoseMsv: 0,
+          segments: [
+            {
+              zone: "I",
+              startedAt: startedAt.toISOString(),
+              endedAt: null,
+            },
+          ],
+        },
+      ],
+      DEFAULT_ZONE_PARAMS,
+      staleNow,
+    );
+
+    expect(totals.timeInZoneSeconds).toBe(0);
+    expect(totals.accumulatedDoseMsv).toBe(0);
   });
 });

@@ -19,13 +19,9 @@ import {
 import { useLiveClock } from "@/components/interventions/useLiveClock";
 import {
   dosePercentOfLimit,
-  formatAccumulatedDose,
+  formatAccumulatedDoseMsv,
 } from "@/lib/dosimetry/formatOperationDose";
-import type {
-  AccumulatedDoseUnit,
-  ActiveZone,
-  OperationDosimetry,
-} from "@/lib/types";
+import type { ActiveZone, OperationDosimetry } from "@/lib/types";
 
 function riskLabel(percent: number): {
   text: string;
@@ -220,11 +216,7 @@ export function OperationParticipantCard({
           {risk.text}
         </span>
         <span className="text-xs text-muted">
-          Dosis acum.{" "}
-          {formatAccumulatedDose(
-            totals.accumulatedDoseMsv,
-            "mSv" satisfies AccumulatedDoseUnit,
-          )}
+          Dosis acum. {formatAccumulatedDoseMsv(totals.accumulatedDoseMsv)}
         </span>
       </div>
 

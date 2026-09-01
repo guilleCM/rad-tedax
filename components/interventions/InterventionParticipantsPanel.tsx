@@ -29,7 +29,6 @@ import type {
   ActiveZone,
   InterventionStatus,
   OperationDosimetry,
-  ZoneParams,
 } from "@/lib/types";
 import { Button, Input, Label } from "@/components/ui/forms";
 import { Dialog } from "@/components/ui/Dialog";
@@ -44,7 +43,6 @@ type Props = {
   interventionId: string;
   interventionStatus: InterventionStatus;
   operationDosimetry: OperationDosimetry;
-  zoneParams: ZoneParams;
   operationParticipants: SerializedOperationParticipant[];
   readOnly?: boolean;
 };
@@ -53,7 +51,6 @@ export function InterventionParticipantsPanel({
   interventionId,
   interventionStatus,
   operationDosimetry: initialDosimetry,
-  zoneParams,
   operationParticipants: initialParticipants,
   readOnly = false,
 }: Props) {
@@ -94,7 +91,11 @@ export function InterventionParticipantsPanel({
 
   if (initialParticipants !== prevInitialParticipants) {
     setPrevInitialParticipants(initialParticipants);
-    setParticipants(initialParticipants);
+    setParticipants((current) => {
+      const hasLocalActive = current.some((participant) => participant.isActive);
+      if (hasLocalActive) return current;
+      return initialParticipants;
+    });
   }
 
   const activeCount = participants.filter((participant) => participant.isActive).length;
@@ -105,13 +106,13 @@ export function InterventionParticipantsPanel({
     for (const participant of participants) {
       const totals = getSerializedParticipantTotals(
         participant.sessions,
-        zoneParams,
+        participant.zoneParams,
         now,
       );
       accumulatedMsv += totals.accumulatedDoseMsv;
     }
     return accumulatedMsv;
-  }, [participants, zoneParams, now]);
+  }, [participants, now]);
 
   const percent = dosePercentOfLimit(
     teamTotals,
@@ -193,7 +194,6 @@ export function InterventionParticipantsPanel({
         [userId]: updated.activeZone!,
       }));
     }
-    router.refresh();
   }
 
   return (

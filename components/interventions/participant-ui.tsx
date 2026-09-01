@@ -5,6 +5,7 @@ import { ZONE_UI } from "@/components/interventions/operation-participant-types"
 import type { AccumulatedDoseUnit, ActiveZone } from "@/lib/types";
 import {
   formatAccumulatedDose,
+  formatAccumulatedDoseMsv,
 } from "@/lib/dosimetry/formatOperationDose";
 
 const DOSE_PERCENT_FORMAT = new Intl.NumberFormat("es-ES", {
@@ -236,7 +237,7 @@ export function TeamDoseProgressCard({
       </p>
       <div>
         <p className="text-xl font-semibold text-foreground">
-          {formatAccumulatedDose(accumulatedMsv, "mSv")}
+          {formatAccumulatedDoseMsv(accumulatedMsv)}
         </p>
         <p className="mt-1 text-sm text-muted">
           {displayPercent}% del límite total

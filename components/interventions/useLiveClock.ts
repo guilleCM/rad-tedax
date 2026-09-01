@@ -7,6 +7,7 @@ export function useLiveClock(enabled = true, intervalMs = 1000) {
 
   useEffect(() => {
     if (!enabled) return;
+    setNow(new Date());
     const id = window.setInterval(() => setNow(new Date()), intervalMs);
     return () => window.clearInterval(id);
   }, [enabled, intervalMs]);

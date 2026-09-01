@@ -43,6 +43,7 @@ describe("stopAllActiveParticipantSessions", () => {
     expect(getActiveSession(result[0])).toBeNull();
     expect(result[0].sessions[0].endedAt).toEqual(now);
     expect(result[0].sessions[0].timeInZoneSeconds).toBeGreaterThan(0);
+    expect(result[0].sessions[0].accumulatedDoseMsv).toBeGreaterThan(0);
     expect(result[1].sessions).toHaveLength(0);
   });
 });
