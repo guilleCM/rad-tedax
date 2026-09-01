@@ -40,18 +40,45 @@ export const zoneParamsSchema = z
 
 const accumulatedDoseUnitSchema = z.enum(["mSv", "uSv"]);
 
-export const operationDosimetrySchema = z
-  .object({
-    activeParticipants: z.number().int().min(0).max(12),
-    totalParticipants: z.number().int().min(0).max(12),
-    maxOperationDose: z.object({
-      value: z.number().positive(),
-      unit: accumulatedDoseUnitSchema,
-    }),
-  })
-  .refine((d) => d.activeParticipants <= d.totalParticipants, {
-    message: "activeParticipants must be <= totalParticipants",
-  });
+export const objectIdSchema = z
+  .string()
+  .regex(/^[a-fA-F0-9]{24}$/, "Invalid id");
+
+export const operationDosimetrySchema = z.object({
+  maxOperationDose: z.object({
+    value: z.number().positive(),
+    unit: accumulatedDoseUnitSchema,
+  }),
+});
+
+export const operationTeamSchema = z.enum(["search", "intervention"]);
+
+export const activeZoneSchema = z.enum(["I", "II"]);
+
+export const addOperationParticipantSchema = z.object({
+  userId: objectIdSchema,
+  team: operationTeamSchema,
+});
+
+export const startSessionSchema = z.object({
+  action: z.literal("start"),
+  zone: activeZoneSchema,
+});
+
+export const changeZoneSchema = z.object({
+  action: z.literal("changeZone"),
+  zone: activeZoneSchema,
+});
+
+export const stopSessionSchema = z.object({
+  action: z.literal("stop"),
+});
+
+export const sessionActionSchema = z.discriminatedUnion("action", [
+  startSessionSchema,
+  changeZoneSchema,
+  stopSessionSchema,
+]);
 
 export const createInterventionSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -85,7 +112,3 @@ export const updateInterventionSchema = z.object({
   operationDosimetry: operationDosimetrySchema.optional(),
   recalculate: z.boolean().optional(),
 });
-
-export const objectIdSchema = z
-  .string()
-  .regex(/^[a-fA-F0-9]{24}$/, "Invalid id");

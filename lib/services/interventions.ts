@@ -9,6 +9,7 @@ import {
   updateInterventionById,
 } from "@/lib/repositories/interventions";
 import { isOwner } from "@/lib/services/intervention-access";
+import { serializeOperationParticipants } from "@/lib/services/operationParticipants";
 import {
   canCreateIntervention,
   canDeleteIntervention,
@@ -56,6 +57,7 @@ function buildZones(
 }
 
 export function serializeIntervention(doc: InterventionDoc) {
+  const zoneParams = { ...DEFAULT_ZONE_PARAMS, ...doc.zoneParams };
   return {
     id: doc._id.toString(),
     name: doc.name,
@@ -69,7 +71,7 @@ export function serializeIntervention(doc: InterventionDoc) {
           label: doc.location.label ?? null,
         }
       : null,
-    zoneParams: { ...DEFAULT_ZONE_PARAMS, ...doc.zoneParams },
+    zoneParams,
     zones: doc.zones
       ? {
           zoneI: doc.zones.zoneI,
@@ -87,9 +89,31 @@ export function serializeIntervention(doc: InterventionDoc) {
         ...doc.operationDosimetry?.maxOperationDose,
       },
     },
+    operationParticipants: (doc.operationParticipants ?? []).map((participant) => ({
+      userId: participant.userId.toString(),
+      team: participant.team,
+      addedAt: participant.addedAt.toISOString(),
+      sessions: participant.sessions.map((session) => ({
+        startedAt: session.startedAt.toISOString(),
+        endedAt: session.endedAt?.toISOString() ?? null,
+        segments: session.segments.map((segment) => ({
+          zone: segment.zone,
+          startedAt: segment.startedAt.toISOString(),
+          endedAt: segment.endedAt?.toISOString() ?? null,
+        })),
+        timeInZoneSeconds: session.timeInZoneSeconds,
+        accumulatedDoseMsv: session.accumulatedDoseMsv,
+      })),
+    })),
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
+}
+
+export async function serializeInterventionWithParticipants(doc: InterventionDoc) {
+  const base = serializeIntervention(doc);
+  const operationParticipants = await serializeOperationParticipants(doc);
+  return { ...base, operationParticipants };
 }
 
 export async function listInterventions(userId: string, role: UserRole) {
@@ -111,6 +135,21 @@ export async function getIntervention(
     throw new AppError("FORBIDDEN", "No tienes acceso a esta intervención", 403);
   }
   return serializeIntervention(doc);
+}
+
+export async function getInterventionWithOperationParticipants(
+  id: string,
+  userId: string,
+  role: UserRole,
+) {
+  const doc = await findInterventionById(id);
+  if (!doc) throw new AppError("NOT_FOUND", "Intervención no encontrada", 404);
+  if (!canReadIntervention(role)) {
+    throw new AppError("FORBIDDEN", "No tienes acceso a esta intervención", 403);
+  }
+  const base = serializeIntervention(doc);
+  const operationParticipants = await serializeOperationParticipants(doc);
+  return { ...base, operationParticipants };
 }
 
 export async function createIntervention(

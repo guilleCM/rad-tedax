@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { AppError, getIntervention } from "@/lib/services/interventions";
-import { getInterventionParticipants } from "@/lib/services/users";
+import {
+  AppError,
+  getInterventionWithOperationParticipants,
+} from "@/lib/services/interventions";
 import { canUpdateInterventionByOwner } from "@/lib/services/permissions";
 import { InterventionParticipantsPanel } from "@/components/interventions/InterventionParticipantsPanel";
 
@@ -18,15 +20,15 @@ export default async function InterventionParticipantsPage({
 
   let intervention;
   try {
-    intervention = await getIntervention(id, session.user.id, role);
+    intervention = await getInterventionWithOperationParticipants(
+      id,
+      session.user.id,
+      role,
+    );
   } catch (error) {
     if (error instanceof AppError && error.status === 404) notFound();
     throw error;
   }
-
-  const participants = await getInterventionParticipants(
-    intervention.participantIds,
-  );
 
   const readOnly = !canUpdateInterventionByOwner(
     role,
@@ -37,8 +39,10 @@ export default async function InterventionParticipantsPage({
   return (
     <InterventionParticipantsPanel
       interventionId={intervention.id}
+      interventionStatus={intervention.status}
       operationDosimetry={intervention.operationDosimetry}
-      participants={participants}
+      zoneParams={intervention.zoneParams}
+      operationParticipants={intervention.operationParticipants}
       readOnly={readOnly}
     />
   );

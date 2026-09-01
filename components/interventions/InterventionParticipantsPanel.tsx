@@ -1,32 +1,37 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  MoreVertical,
+  Plus,
   Shield,
   UserRound,
 } from "lucide-react";
-import { Button, Input, Label } from "@/components/ui/forms";
-import { Dialog } from "@/components/ui/Dialog";
+import { AddOperationParticipantDialog } from "@/components/interventions/AddOperationParticipantDialog";
+import { OperationParticipantCard } from "@/components/interventions/OperationParticipantCard";
+import type { SerializedOperationParticipant } from "@/components/interventions/operation-participant-types";
 import {
-  ParticipantAvatar,
   SummaryStatCard,
   TeamDoseProgressCard,
 } from "@/components/interventions/participant-ui";
+import { useLiveClock } from "@/components/interventions/useLiveClock";
+import { getSerializedParticipantTotals } from "@/domain/dosimetry/computeDose";
 import {
-  ACCUMULATED_DOSE_UNITS,
   dosePercentOfLimit,
   formatAccumulatedDose,
   formatDoseValue,
 } from "@/lib/dosimetry/formatOperationDose";
 import type {
-  AccumulatedDoseUnit,
+  ActiveZone,
+  InterventionStatus,
   OperationDosimetry,
+  ZoneParams,
 } from "@/lib/types";
+import { Button, Input, Label } from "@/components/ui/forms";
+import { Dialog } from "@/components/ui/Dialog";
 
 export type SerializedParticipant = {
   id: string;
@@ -36,60 +41,87 @@ export type SerializedParticipant = {
 
 type Props = {
   interventionId: string;
+  interventionStatus: InterventionStatus;
   operationDosimetry: OperationDosimetry;
-  participants: SerializedParticipant[];
+  zoneParams: ZoneParams;
+  operationParticipants: SerializedOperationParticipant[];
   readOnly?: boolean;
 };
 
-type EditingDialog = "team" | "dose" | null;
-
 export function InterventionParticipantsPanel({
   interventionId,
+  interventionStatus,
   operationDosimetry: initialDosimetry,
-  participants,
+  zoneParams,
+  operationParticipants: initialParticipants,
   readOnly = false,
 }: Props) {
   const router = useRouter();
   const [dosimetry, setDosimetry] = useState(initialDosimetry);
   const [prevInitialDosimetry, setPrevInitialDosimetry] =
     useState(initialDosimetry);
-  const [editing, setEditing] = useState<EditingDialog>(null);
-  const [draftActive, setDraftActive] = useState(0);
-  const [draftTotal, setDraftTotal] = useState(0);
+  const [participants, setParticipants] = useState(initialParticipants);
+  const [prevInitialParticipants, setPrevInitialParticipants] =
+    useState(initialParticipants);
+  const [zoneByUser, setZoneByUser] = useState<Record<string, ActiveZone>>({});
+  const [addOpen, setAddOpen] = useState(false);
+  const [editingDose, setEditingDose] = useState(false);
   const [draftDoseValue, setDraftDoseValue] = useState(10);
   const [draftDoseUnit, setDraftDoseUnit] =
-    useState<AccumulatedDoseUnit>("mSv");
+    useState<OperationDosimetry["maxOperationDose"]["unit"]>("mSv");
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  const hasActiveSessions = participants.some((participant) => participant.isActive);
+  const now = useLiveClock(hasActiveSessions);
 
   if (initialDosimetry !== prevInitialDosimetry) {
     setPrevInitialDosimetry(initialDosimetry);
     setDosimetry(initialDosimetry);
   }
 
-  const accumulatedMsv = 0;
+  if (initialParticipants !== prevInitialParticipants) {
+    setPrevInitialParticipants(initialParticipants);
+    setParticipants(initialParticipants);
+  }
+
+  const activeCount = participants.filter((participant) => participant.isActive).length;
+  const totalCount = participants.length;
+
+  const teamTotals = useMemo(() => {
+    let accumulatedMsv = 0;
+    for (const participant of participants) {
+      const totals = getSerializedParticipantTotals(
+        participant.sessions,
+        zoneParams,
+        now,
+      );
+      accumulatedMsv += totals.accumulatedDoseMsv;
+    }
+    return accumulatedMsv;
+  }, [participants, zoneParams, now]);
+
   const percent = dosePercentOfLimit(
-    accumulatedMsv,
+    teamTotals,
     dosimetry.maxOperationDose.value,
     dosimetry.maxOperationDose.unit,
   );
 
-  function openTeamDialog() {
-    if (readOnly) return;
-    setDraftActive(dosimetry.activeParticipants);
-    setDraftTotal(dosimetry.totalParticipants);
-    setDialogError(null);
-    setEditing("team");
+  const effectiveReadOnly =
+    readOnly || interventionStatus === "closed";
+
+  function getSelectedZone(userId: string): ActiveZone {
+    return zoneByUser[userId] ?? "II";
   }
 
   function openDoseDialog() {
-    if (readOnly) return;
+    if (effectiveReadOnly) return;
     setDraftDoseValue(dosimetry.maxOperationDose.value);
     setDraftDoseUnit(dosimetry.maxOperationDose.unit);
     setDialogError(null);
-    setEditing("dose");
+    setEditingDose(true);
   }
 
   async function saveDosimetry(next: OperationDosimetry) {
@@ -112,26 +144,9 @@ export function InterventionParticipantsPanel({
     }
 
     setDosimetry(json.data.operationDosimetry);
-    setEditing(null);
+    setEditingDose(false);
     setMessage("Configuración guardada");
     router.refresh();
-  }
-
-  function applyTeamSettings() {
-    if (draftActive < 0 || draftActive > 12 || draftTotal < 0 || draftTotal > 12) {
-      setDialogError("Los valores deben estar entre 0 y 12");
-      return;
-    }
-    if (draftActive > draftTotal) {
-      setDialogError("Los activos no pueden superar el total");
-      return;
-    }
-
-    void saveDosimetry({
-      ...dosimetry,
-      activeParticipants: draftActive,
-      totalParticipants: draftTotal,
-    });
   }
 
   function applyDoseSettings() {
@@ -141,7 +156,6 @@ export function InterventionParticipantsPanel({
     }
 
     void saveDosimetry({
-      ...dosimetry,
       maxOperationDose: {
         value: draftDoseValue,
         unit: draftDoseUnit,
@@ -149,17 +163,33 @@ export function InterventionParticipantsPanel({
     });
   }
 
+  function handleSessionChange(
+    userId: string,
+    updated: SerializedOperationParticipant,
+  ) {
+    setParticipants((current) =>
+      current.map((participant) =>
+        participant.userId === userId ? updated : participant,
+      ),
+    );
+    if (updated.activeZone) {
+      setZoneByUser((current) => ({
+        ...current,
+        [userId]: updated.activeZone!,
+      }));
+    }
+    router.refresh();
+  }
+
   return (
     <div className="space-y-4">
       <div className="grid gap-3 grid-cols-2">
         <SummaryStatCard
           title="Intervinientes"
-          value={String(dosimetry.activeParticipants)}
+          value={String(activeCount)}
           valueSuffix="activos"
-          detail={`de ${dosimetry.totalParticipants} totales`}
+          detail={`de ${totalCount} totales`}
           icon={UserRound}
-          onClick={openTeamDialog}
-          disabled={readOnly}
         />
         <SummaryStatCard
           title="Dosis máxima permitida"
@@ -170,13 +200,13 @@ export function InterventionParticipantsPanel({
           }
           icon={Shield}
           onClick={openDoseDialog}
-          disabled={readOnly}
+          disabled={effectiveReadOnly}
         />
       </div>
 
       <section className="rounded-lg border border-border bg-card p-4">
         <TeamDoseProgressCard
-          accumulatedMsv={accumulatedMsv}
+          accumulatedMsv={teamTotals}
           maxValue={dosimetry.maxOperationDose.value}
           maxUnit={dosimetry.maxOperationDose.unit}
           percent={percent}
@@ -201,67 +231,57 @@ export function InterventionParticipantsPanel({
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
             Lista de intervinientes
           </h2>
-          <span className="text-xs text-muted">Ordenar</span>
+          {!effectiveReadOnly && (
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-8 px-2 text-xs"
+              onClick={() => setAddOpen(true)}
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              Añadir
+            </Button>
+          )}
         </div>
 
         {participants.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border bg-card p-8 text-center">
-            <p className="text-sm text-muted">No hay intervinientes asignados.</p>
+            <p className="text-sm text-muted">
+              No hay intervinientes en esta operación.
+            </p>
+            {!effectiveReadOnly && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="mt-4"
+                onClick={() => setAddOpen(true)}
+              >
+                <Plus className="h-4 w-4" aria-hidden />
+                Añadir interviniente
+              </Button>
+            )}
           </div>
         ) : (
           <ul className="space-y-3">
             {participants.map((participant) => (
-              <li
-                key={participant.id}
-                className="rounded-lg border border-border bg-card p-4"
-              >
-                <div className="flex items-start gap-3">
-                  <ParticipantAvatar name={participant.name} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-foreground">
-                          {participant.name}
-                        </p>
-                        <p className="text-xs text-muted">Interviniente</p>
-                      </div>
-                      <button
-                        type="button"
-                        disabled
-                        title="Próximamente"
-                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted opacity-50"
-                        aria-label="Opciones"
-                      >
-                        <MoreVertical className="h-4 w-4" aria-hidden />
-                      </button>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <span className="inline-flex rounded-full bg-success px-2 py-0.5 text-xs font-medium text-success-foreground">
-                        BAJO
-                      </span>
-                      <span className="text-xs text-muted">
-                        Dosis acum. — / —
-                      </span>
-                    </div>
-
-                    <dl className="mt-3 grid gap-2 text-xs text-muted sm:grid-cols-2">
-                      <div>
-                        <dt className="inline">Entrada: </dt>
-                        <dd className="inline">—</dd>
-                      </div>
-                      <div>
-                        <dt className="inline">Tiempo en zona: </dt>
-                        <dd className="inline">—</dd>
-                      </div>
-                      <div>
-                        <dt className="inline">Tasa área: </dt>
-                        <dd className="inline">—</dd>
-                      </div>
-                    </dl>
-                  </div>
-                </div>
-              </li>
+              <OperationParticipantCard
+                key={participant.userId}
+                participant={participant}
+                interventionId={interventionId}
+                maxOperationDose={dosimetry.maxOperationDose}
+                readOnly={effectiveReadOnly}
+                selectedZone={getSelectedZone(participant.userId)}
+                onZoneChange={(zone) =>
+                  setZoneByUser((current) => ({
+                    ...current,
+                    [participant.userId]: zone,
+                  }))
+                }
+                onSessionChange={(updated) =>
+                  handleSessionChange(participant.userId, updated)
+                }
+                onError={setError}
+              />
             ))}
           </ul>
         )}
@@ -290,61 +310,21 @@ export function InterventionParticipantsPanel({
         </Button>
       </div>
 
-      <Dialog
-        open={editing === "team"}
-        onClose={() => setEditing(null)}
-        title="Configurar intervinientes"
-      >
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="active-participants">Activos (0–12)</Label>
-            <Input
-              id="active-participants"
-              type="number"
-              min={0}
-              max={12}
-              value={draftActive}
-              onChange={(e) => setDraftActive(Number(e.target.value))}
-            />
-          </div>
-          <div>
-            <Label htmlFor="total-participants">Totales (0–12)</Label>
-            <Input
-              id="total-participants"
-              type="number"
-              min={0}
-              max={12}
-              value={draftTotal}
-              onChange={(e) => setDraftTotal(Number(e.target.value))}
-            />
-          </div>
-
-          {dialogError && (
-            <p className="text-sm text-danger-foreground">{dialogError}</p>
-          )}
-
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setEditing(null)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              onClick={applyTeamSettings}
-              disabled={saving}
-            >
-              {saving ? "Guardando…" : "Guardar"}
-            </Button>
-          </div>
-        </div>
-      </Dialog>
+      <AddOperationParticipantDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        interventionId={interventionId}
+        excludedUserIds={participants.map((participant) => participant.userId)}
+        onAdded={(participant) => {
+          setParticipants((current) => [...current, participant]);
+          setMessage("Interviniente añadido");
+          router.refresh();
+        }}
+      />
 
       <Dialog
-        open={editing === "dose"}
-        onClose={() => setEditing(null)}
+        open={editingDose}
+        onClose={() => setEditingDose(false)}
         title="Dosis máxima permitida"
       >
         <div className="space-y-4">
@@ -366,14 +346,13 @@ export function InterventionParticipantsPanel({
               className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none ring-ring focus:ring-2"
               value={draftDoseUnit}
               onChange={(e) =>
-                setDraftDoseUnit(e.target.value as AccumulatedDoseUnit)
+                setDraftDoseUnit(
+                  e.target.value as OperationDosimetry["maxOperationDose"]["unit"],
+                )
               }
             >
-              {ACCUMULATED_DOSE_UNITS.map((unit) => (
-                <option key={unit.value} value={unit.value}>
-                  {unit.label}
-                </option>
-              ))}
+              <option value="mSv">mSv</option>
+              <option value="uSv">µSv</option>
             </select>
           </div>
           <p className="text-xs text-muted">
@@ -392,7 +371,7 @@ export function InterventionParticipantsPanel({
             <Button
               type="button"
               variant="secondary"
-              onClick={() => setEditing(null)}
+              onClick={() => setEditingDose(false)}
             >
               Cancelar
             </Button>
