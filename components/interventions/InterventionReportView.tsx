@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FileDown,
   MapPin,
   Radiation,
   Share2,
   ShieldCheck,
+  ClipboardCheck,
+  ClipboardX,
 } from "lucide-react";
 import { DeleteInterventionButton } from "@/components/interventions/DeleteInterventionButton";
 import { InterventionStatusBadge } from "@/components/interventions/InterventionStatusBadge";
@@ -117,6 +119,9 @@ export function InterventionReportView({
   onExportPdf,
 }: Props) {
   const [exporting, setExporting] = useState(false);
+  const [shareFeedback, setShareFeedback] = useState<"idle" | "copied" | "error">(
+    "idle",
+  );
   const hasActiveSessions = intervention.operationParticipants.some(
     (participant) => participant.isActive,
   );
@@ -151,6 +156,22 @@ export function InterventionReportView({
       await onExportPdf();
     } finally {
       setExporting(false);
+    }
+  }
+
+  useEffect(() => {
+    if (shareFeedback === "idle") return;
+    const id = window.setTimeout(() => setShareFeedback("idle"), 1500);
+    return () => window.clearTimeout(id);
+  }, [shareFeedback]);
+
+  async function handleShareReport() {
+    const url = `${window.location.origin}/interventions/${intervention.id}/informe`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareFeedback("copied");
+    } catch {
+      setShareFeedback("error");
     }
   }
 
@@ -407,12 +428,22 @@ export function InterventionReportView({
         <Button
           type="button"
           variant="secondary"
-          disabled
-          title="Próximamente"
           className="w-full"
+          onClick={() => void handleShareReport()}
+          aria-live="polite"
         >
-          <Share2 className="h-4 w-4" aria-hidden />
-          Compartir informe
+          {shareFeedback === "copied" ? (
+            <ClipboardCheck className="h-4 w-4" aria-hidden />
+          ) : shareFeedback === "error" ? (
+            <ClipboardX className="h-4 w-4" aria-hidden />
+          ) : (
+            <Share2 className="h-4 w-4" aria-hidden />
+          )}
+          {shareFeedback === "copied"
+            ? "URL copiada"
+            : shareFeedback === "error"
+              ? "No se pudo copiar"
+              : "Compartir informe"}
         </Button>
       </div>
 
