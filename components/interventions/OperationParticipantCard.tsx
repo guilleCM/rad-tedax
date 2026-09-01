@@ -1,18 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { Pause, Play, MoreVertical } from "lucide-react";
+import { Pause, Play } from "lucide-react";
 import {
   doseRateMsvPerHour,
   getSerializedParticipantTotals,
 } from "@/domain/dosimetry/computeDose";
-import { ParticipantAvatar } from "@/components/interventions/participant-ui";
 import {
-  formatDuration,
-  formatTimeLabel,
+  formatDurationHms,
   OPERATION_TEAM_LABELS,
   type SerializedOperationParticipant,
 } from "@/components/interventions/operation-participant-types";
+import {
+  ParticipantAvatar,
+  ParticipantDoseProgressRow,
+  ZoneRadioToggle,
+} from "@/components/interventions/participant-ui";
 import { useLiveClock } from "@/components/interventions/useLiveClock";
 import {
   dosePercentOfLimit,
@@ -46,11 +49,21 @@ function riskLabel(percent: number): {
   };
 }
 
-function formatRate(zone: ActiveZone, zoneParams: SerializedOperationParticipant["zoneParams"]) {
+function formatRate(
+  zone: ActiveZone,
+  zoneParams: SerializedOperationParticipant["zoneParams"],
+) {
   const rate = doseRateMsvPerHour(zone, zoneParams);
-  if (rate >= 1) return `${rate.toFixed(2)} mSv/h`;
-  return `${(rate * 1000).toFixed(0)} µSv/h`;
+  const formatted = new Intl.NumberFormat("es-ES", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(rate >= 1 ? rate : rate * 1000);
+  return rate >= 1 ? `${formatted} mSv/h` : `${formatted} µSv/h`;
 }
+
+type SessionResponse = SerializedOperationParticipant & {
+  interventionStatus?: "active";
+};
 
 type Props = {
   participant: SerializedOperationParticipant;
@@ -60,6 +73,7 @@ type Props = {
   selectedZone: ActiveZone;
   onZoneChange: (zone: ActiveZone) => void;
   onSessionChange: (participant: SerializedOperationParticipant) => void;
+  onInterventionActivated?: () => void;
   onError: (message: string) => void;
 };
 
@@ -71,6 +85,7 @@ export function OperationParticipantCard({
   selectedZone,
   onZoneChange,
   onSessionChange,
+  onInterventionActivated,
   onError,
 }: Props) {
   const [acting, setActing] = useState(false);
@@ -87,10 +102,11 @@ export function OperationParticipantCard({
     maxOperationDose.unit,
   );
   const risk = riskLabel(percent);
-  const activeSession = participant.sessions.find((s) => !s.endedAt) ?? null;
   const displayZone = participant.isActive
     ? participant.activeZone ?? selectedZone
     : selectedZone;
+  const hasMetrics =
+    participant.isActive || totals.timeInZoneSeconds > 0;
 
   async function handlePlayStop() {
     if (readOnly || acting) return;
@@ -117,7 +133,11 @@ export function OperationParticipantCard({
       return;
     }
 
-    onSessionChange(json.data);
+    const data = json.data as SessionResponse;
+    if (data.interventionStatus === "active") {
+      onInterventionActivated?.();
+    }
+    onSessionChange(data);
   }
 
   async function handleZoneSelect(zone: ActiveZone) {
@@ -148,109 +168,71 @@ export function OperationParticipantCard({
 
   return (
     <li className="rounded-lg border border-border bg-card p-4">
-      <div className="flex items-start gap-3">
-        <ParticipantAvatar name={participant.name} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="truncate font-semibold text-foreground">
-                {participant.name}
-              </p>
-              <p className="text-xs text-muted">
-                {OPERATION_TEAM_LABELS[participant.team]}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                onClick={() => void handlePlayStop()}
-                disabled={readOnly || acting}
-                className={`inline-flex h-8 w-8 items-center justify-center rounded-md border border-border transition-colors ${
-                  participant.isActive
-                    ? "bg-danger text-danger-foreground hover:opacity-90"
-                    : "bg-success text-success-foreground hover:opacity-90"
-                } disabled:opacity-50`}
-                aria-label={participant.isActive ? "Detener" : "Iniciar"}
-                title={participant.isActive ? "Detener" : "Iniciar"}
-              >
-                {participant.isActive ? (
-                  <Pause className="h-4 w-4" aria-hidden />
-                ) : (
-                  <Play className="h-4 w-4" aria-hidden />
-                )}
-              </button>
-              <button
-                type="button"
-                disabled
-                title="Próximamente"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted opacity-50"
-                aria-label="Opciones"
-              >
-                <MoreVertical className="h-4 w-4" aria-hidden />
-              </button>
-            </div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-3">
+          <ParticipantAvatar name={participant.name} />
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-foreground">
+              {participant.name}
+            </p>
+            <p className="text-xs text-muted">
+              {OPERATION_TEAM_LABELS[participant.team]}
+            </p>
           </div>
-
-          <div className="mt-3 flex flex-wrap gap-3">
-            {(["I", "II"] as ActiveZone[]).map((zone) => (
-              <label
-                key={zone}
-                className={`inline-flex items-center gap-2 text-xs ${
-                  readOnly ? "opacity-60" : ""
-                }`}
-              >
-                <input
-                  type="radio"
-                  name={`zone-${participant.userId}`}
-                  value={zone}
-                  checked={displayZone === zone}
-                  disabled={readOnly || acting}
-                  onChange={() => void handleZoneSelect(zone)}
-                  className="accent-accent"
-                />
-                Zona {zone}
-              </label>
-            ))}
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${risk.className}`}
-            >
-              {risk.text}
-            </span>
-            <span className="text-xs text-muted">
-              Dosis acum.{" "}
-              {formatAccumulatedDose(
-                totals.accumulatedDoseMsv,
-                "mSv" satisfies AccumulatedDoseUnit,
-              )}
-            </span>
-          </div>
-
-          <dl className="mt-3 grid gap-2 text-xs text-muted sm:grid-cols-2">
-            <div>
-              <dt className="inline">Entrada: </dt>
-              <dd className="inline">
-                {activeSession ? formatTimeLabel(activeSession.startedAt) : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="inline">Tiempo en zona: </dt>
-              <dd className="inline">
-                {formatDuration(totals.timeInZoneSeconds)}
-              </dd>
-            </div>
-            <div>
-              <dt className="inline">Tasa área: </dt>
-              <dd className="inline">
-                {participant.isActive || totals.timeInZoneSeconds > 0
-                  ? formatRate(displayZone, participant.zoneParams)
-                  : "—"}
-              </dd>
-            </div>
-          </dl>
         </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => void handlePlayStop()}
+            disabled={readOnly || acting}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-md border border-border transition-colors ${
+              participant.isActive
+                ? "bg-danger text-danger-foreground hover:opacity-90"
+                : "bg-success text-success-foreground hover:opacity-90"
+            } disabled:opacity-50`}
+            aria-label={participant.isActive ? "Detener" : "Iniciar"}
+            title={participant.isActive ? "Detener" : "Iniciar"}
+          >
+            {participant.isActive ? (
+              <Pause className="h-4 w-4" aria-hidden />
+            ) : (
+              <Play className="h-4 w-4" aria-hidden />
+            )}
+          </button>
+          <ZoneRadioToggle
+            name={`zone-${participant.userId}`}
+            value={displayZone}
+            onChange={(zone) => void handleZoneSelect(zone)}
+            disabled={readOnly || acting}
+          />
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span
+          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${risk.className}`}
+        >
+          {risk.text}
+        </span>
+        <span className="text-xs text-muted">
+          Dosis acum.{" "}
+          {formatAccumulatedDose(
+            totals.accumulatedDoseMsv,
+            "mSv" satisfies AccumulatedDoseUnit,
+          )}
+        </span>
+      </div>
+
+      <div className="mt-3">
+        <ParticipantDoseProgressRow
+          rateLabel={
+            hasMetrics
+              ? formatRate(displayZone, participant.zoneParams)
+              : "—"
+          }
+          timeLabel={formatDurationHms(totals.timeInZoneSeconds)}
+          percent={percent}
+        />
       </div>
     </li>
   );

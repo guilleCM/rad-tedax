@@ -4,6 +4,7 @@ import {
   getActiveSession,
   isParticipantActive,
 } from "@/domain/dosimetry/computeDose";
+import { shouldActivateIntervention } from "@/domain/dosimetry/operationActivation";
 import { findInterventionById, updateInterventionById } from "@/lib/repositories/interventions";
 import { findUserById } from "@/lib/repositories/users";
 import { AppError } from "@/lib/services/interventions";
@@ -61,10 +62,12 @@ async function saveParticipants(
   doc: InterventionDoc,
   participants: OperationParticipant[],
   participantIds: ObjectId[],
+  extraPatch: Partial<Pick<InterventionDoc, "status">> = {},
 ) {
   const updated = await updateInterventionById(id, {
     operationParticipants: participants,
     participantIds,
+    ...extraPatch,
   });
   if (!updated) {
     throw new AppError("NOT_FOUND", "Intervención no encontrada", 404);
@@ -221,20 +224,26 @@ export async function startParticipantSession(
       : p,
   );
 
+  const activate = shouldActivateIntervention(doc.status, participants);
   const updated = await saveParticipants(
     interventionId,
     doc,
     nextParticipants,
     doc.participantIds ?? [],
+    activate ? { status: "active" } : {},
   );
 
   const user = await findUserById(userId);
-  return serializeParticipantRecord(
+  const record = serializeParticipantRecord(
     findParticipant(getOperationParticipants(updated), userId)!,
     userId,
     getZoneParams(updated),
     user?.name,
   );
+
+  return activate
+    ? { ...record, interventionStatus: "active" as const }
+    : record;
 }
 
 export async function changeParticipantZone(

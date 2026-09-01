@@ -57,6 +57,9 @@ export function InterventionParticipantsPanel({
   readOnly = false,
 }: Props) {
   const router = useRouter();
+  const [status, setStatus] = useState(interventionStatus);
+  const [prevInterventionStatus, setPrevInterventionStatus] =
+    useState(interventionStatus);
   const [dosimetry, setDosimetry] = useState(initialDosimetry);
   const [prevInitialDosimetry, setPrevInitialDosimetry] =
     useState(initialDosimetry);
@@ -80,6 +83,11 @@ export function InterventionParticipantsPanel({
   if (initialDosimetry !== prevInitialDosimetry) {
     setPrevInitialDosimetry(initialDosimetry);
     setDosimetry(initialDosimetry);
+  }
+
+  if (interventionStatus !== prevInterventionStatus) {
+    setPrevInterventionStatus(interventionStatus);
+    setStatus(interventionStatus);
   }
 
   if (initialParticipants !== prevInitialParticipants) {
@@ -109,8 +117,7 @@ export function InterventionParticipantsPanel({
     dosimetry.maxOperationDose.unit,
   );
 
-  const effectiveReadOnly =
-    readOnly || interventionStatus === "closed";
+  const effectiveReadOnly = readOnly || status === "closed";
 
   function getSelectedZone(userId: string): ActiveZone {
     return zoneByUser[userId] ?? "II";
@@ -219,13 +226,6 @@ export function InterventionParticipantsPanel({
           {error}
         </p>
       )}
-      {message && (
-        <p className="flex items-start gap-2 rounded-md bg-success px-3 py-2 text-sm text-success-foreground">
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          {message}
-        </p>
-      )}
-
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
@@ -280,6 +280,7 @@ export function InterventionParticipantsPanel({
                 onSessionChange={(updated) =>
                   handleSessionChange(participant.userId, updated)
                 }
+                onInterventionActivated={() => setStatus("active")}
                 onError={setError}
               />
             ))}

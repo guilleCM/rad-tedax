@@ -1,7 +1,8 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import type { AccumulatedDoseUnit } from "@/lib/types";
+import { ZONE_UI } from "@/components/interventions/operation-participant-types";
+import type { AccumulatedDoseUnit, ActiveZone } from "@/lib/types";
 import {
   formatAccumulatedDose,
 } from "@/lib/dosimetry/formatOperationDose";
@@ -123,6 +124,94 @@ function progressBarColor(percent: number): string {
   if (percent >= 100) return "bg-danger-foreground";
   if (percent >= 80) return "bg-warning-foreground";
   return "bg-success-foreground";
+}
+
+export function ZoneRadioToggle({
+  name,
+  value,
+  onChange,
+  disabled = false,
+}: {
+  name: string;
+  value: ActiveZone;
+  onChange: (zone: ActiveZone) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Zona radiológica"
+      className="flex flex-col items-center gap-1"
+    >
+      {(["I", "II"] as ActiveZone[]).map((zone) => {
+        const styles = ZONE_UI[zone];
+        const selected = value === zone;
+        return (
+          <button
+            key={zone}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            name={name}
+            disabled={disabled}
+            onClick={() => onChange(zone)}
+            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium transition-colors disabled:opacity-50 ${
+              selected
+                ? styles.selected
+                : "border-border text-muted hover:bg-surface"
+            }`}
+          >
+            <span
+              className={`h-2 w-2 shrink-0 rounded-full ${
+                selected ? styles.dotFilled : styles.dotOutline
+              }`}
+              aria-hidden
+            />
+            {styles.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export function ParticipantDoseProgressRow({
+  rateLabel,
+  timeLabel,
+  percent,
+}: {
+  rateLabel: string;
+  timeLabel: string;
+  percent: number;
+}) {
+  const clamped = Math.min(100, Math.max(0, percent));
+  const displayPercent = DOSE_PERCENT_FORMAT.format(percent);
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-muted">
+        <span>Tasa área: {rateLabel}</span>
+        <span className="mx-1.5" aria-hidden>
+          ·
+        </span>
+        <span>Tiempo en zona: {timeLabel}</span>
+      </p>
+      <div
+        className="h-1.5 overflow-hidden rounded-full bg-surface"
+        role="progressbar"
+        aria-valuenow={clamped}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`Dosis acumulada: ${displayPercent}% del límite`}
+      >
+        <div
+          className={`h-full rounded-full transition-all ${progressBarColor(percent)}`}
+          style={{ width: `${clamped}%` }}
+        />
+      </div>
+      <p className="text-xs text-muted">{displayPercent}% del límite</p>
+    </div>
+  );
 }
 
 export function TeamDoseProgressCard({
