@@ -61,5 +61,11 @@ export async function deleteUserById(id: string): Promise<boolean> {
 
 export async function ensureUserIndexes() {
   const col = await usersCollection();
-  await col.createIndex({ email: 1 }, { unique: true, sparse: true });
+  await col.createIndex(
+    { email: 1 },
+    {
+      unique: true,
+      partialFilterExpression: { email: { $type: "string" } },
+    },
+  );
 }

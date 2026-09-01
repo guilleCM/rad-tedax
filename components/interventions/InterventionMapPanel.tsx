@@ -410,31 +410,36 @@ export function InterventionMapPanel({
 
         {!readOnly && (
           <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={activateMeasurementPlacement}
+                className={
+                  placementMode === "measurement"
+                    ? "flex-1 ring-2 ring-ring"
+                    : "flex-1"
+                }
+              >
+                Punto de medición
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={activateControlPlacement}
+                className={
+                  placementMode === "control"
+                    ? "flex-1 ring-2 ring-ring"
+                    : "flex-1"
+                }
+              >
+                Punto de control
+              </Button>
+            </div>
             <Button
               type="button"
               variant="secondary"
-              onClick={activateMeasurementPlacement}
-              className={
-                placementMode === "measurement"
-                  ? "ring-2 ring-ring"
-                  : undefined
-              }
-            >
-              Punto de medición
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={activateControlPlacement}
-              className={
-                placementMode === "control" ? "ring-2 ring-ring" : undefined
-              }
-            >
-              Punto de control
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
+              className="w-full"
               onClick={() => setNotesOpen((open) => !open)}
               aria-expanded={notesOpen}
               aria-controls={notesId}

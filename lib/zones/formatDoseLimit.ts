@@ -6,11 +6,11 @@ import type {
 } from "@/lib/types";
 
 export const DOSE_LIMIT_OPS: { value: DoseLimitOp; label: string }[] = [
-  { value: "lt", label: "Menor (<)" },
-  { value: "lte", label: "Menor o igual (≤)" },
-  { value: "eq", label: "Igual (=)" },
-  { value: "gt", label: "Mayor (>)" },
-  { value: "gte", label: "Mayor o igual (≥)" },
+  { value: "lt", label: "<" },
+  { value: "lte", label: "≤" },
+  { value: "eq", label: "=" },
+  { value: "gt", label: ">" },
+  { value: "gte", label: "≥" },
 ];
 
 export const DOSE_UNITS: { value: DoseUnit; label: string }[] = [

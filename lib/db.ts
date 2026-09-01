@@ -26,7 +26,7 @@ const clientPromise: Promise<MongoClient> =
 
 export async function getDb(): Promise<Db> {
   const client = await clientPromise;
-  const dbName = process.env.MONGODB_DB || "intervencion_radiologica";
+  const dbName = process.env.MONGODB_DB || "rad_tedax";
   return client.db(dbName);
 }
 

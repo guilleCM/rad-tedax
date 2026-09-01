@@ -22,7 +22,6 @@ export default async function InterventionMapPage({ params }: PageProps) {
     if (error instanceof AppError && error.status === 404) notFound();
     throw error;
   }
-console.log('intervention', intervention);
   const readOnly = !canUpdateInterventionByOwner(
     role,
     intervention.ownerId,

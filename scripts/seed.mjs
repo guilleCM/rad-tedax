@@ -7,7 +7,7 @@ async function main() {
     throw new Error("MONGODB_URI is required");
   }
 
-  const dbName = process.env.MONGODB_DB || "intervencion_radiologica";
+  const dbName = process.env.MONGODB_DB || "rad_tedax";
   const email = (process.env.SEED_EMAIL || "manager@example.com").toLowerCase();
   const password = process.env.SEED_PASSWORD || "changeme123";
   const name = process.env.SEED_NAME || "Gestor Demo";
@@ -22,7 +22,13 @@ async function main() {
   const db = client.db(dbName);
   const users = db.collection("users");
 
-  await users.createIndex({ email: 1 }, { unique: true, sparse: true });
+  await users.createIndex(
+    { email: 1 },
+    {
+      unique: true,
+      partialFilterExpression: { email: { $type: "string" } },
+    },
+  );
 
   const passwordHash = await bcrypt.hash(password, 12);
   const now = new Date();
