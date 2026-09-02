@@ -297,6 +297,7 @@ export function InterventionParticipantsPanel({
                 onInterventionActivated={() => {
                   setStatus("active");
                   patchHeader({ status: "active" });
+                  router.refresh();
                 }}
                 onError={setError}
               />

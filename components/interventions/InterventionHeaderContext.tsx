@@ -8,7 +8,10 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
+  type SetStateAction,
 } from "react";
+import { mergeInterventionHeader } from "@/lib/interventions/mergeHeaderStatus";
 import type { InterventionStatus } from "@/lib/types";
 
 export type InterventionHeaderInfo = {
@@ -22,7 +25,7 @@ export type InterventionSaveState = "idle" | "saving" | "saved";
 
 type InterventionHeaderContextValue = {
   header: InterventionHeaderInfo | null;
-  setHeader: (header: InterventionHeaderInfo | null) => void;
+  setHeader: Dispatch<SetStateAction<InterventionHeaderInfo | null>>;
   patchHeader: (patch: Partial<InterventionHeaderInfo>) => void;
   saveState: InterventionSaveState;
   reportSaveState: (state: InterventionSaveState) => void;
@@ -108,16 +111,9 @@ export function InterventionHeaderSync({
   const ctx = useContext(InterventionHeaderContext);
 
   useEffect(() => {
-    ctx?.setHeader(value);
+    ctx?.setHeader((current) => mergeInterventionHeader(current, value));
     return () => ctx?.setHeader(null);
-  }, [
-    ctx,
-    value.name,
-    value.status,
-    value.createdAt,
-    value.readOnly,
-    value,
-  ]);
+  }, [ctx, value.name, value.status, value.createdAt, value.readOnly]);
 
   return null;
 }

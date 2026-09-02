@@ -103,7 +103,7 @@ export function OperationParticipantCard({
     }
 
     const data = result.data;
-    if (data.interventionStatus === "active") {
+    if (!participant.isActive) {
       onInterventionActivated?.();
     }
     onSessionChange(data);
