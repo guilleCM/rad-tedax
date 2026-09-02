@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { AppError, getIntervention } from "@/lib/services/interventions";
+import { AppError } from "@/lib/errors";
+import { getIntervention } from "@/lib/services/interventions";
 import { canUpdateInterventionByOwner } from "@/lib/services/permissions";
 import { InterventionHeaderSync } from "@/components/interventions/InterventionHeaderContext";
 import { InterventionTabBar } from "@/components/interventions/InterventionTabBar";

@@ -11,7 +11,7 @@ import {
 } from "@/domain/dosimetry/closeActiveSessions";
 import { findInterventionById, updateInterventionById } from "@/lib/repositories/interventions";
 import { findUserById } from "@/lib/repositories/users";
-import { AppError } from "@/lib/services/interventions";
+import { AppError } from "@/lib/errors";
 import { canUpdateIntervention } from "@/lib/services/permissions";
 import {
   DEFAULT_ZONE_PARAMS,

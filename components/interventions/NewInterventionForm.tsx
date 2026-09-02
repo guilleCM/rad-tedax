@@ -3,10 +3,15 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AlertCircle } from "lucide-react";
+import { apiFetch } from "@/lib/api-client";
 import { Button, Input, Label } from "@/components/ui/forms";
 
 type Props = {
   defaultName: string;
+};
+
+type CreatedIntervention = {
+  id: string;
 };
 
 export function NewInterventionForm({ defaultName }: Props) {
@@ -24,29 +29,40 @@ export function NewInterventionForm({ defaultName }: Props) {
     setLoading(true);
     setError(null);
 
+    const occurredDate = new Date(occurredAt);
+    if (Number.isNaN(occurredDate.getTime())) {
+      setError("La fecha no es válida.");
+      setLoading(false);
+      return;
+    }
+
     const body: Record<string, string> = {
       name,
-      occurredAt: new Date(occurredAt).toISOString(),
+      occurredAt: occurredDate.toISOString(),
     };
     const trimmedZone = zone.trim();
     if (trimmedZone) body.locationLabel = trimmedZone;
 
-    const res = await fetch("/api/interventions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    try {
+      const result = await apiFetch<CreatedIntervention>("/api/interventions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
 
-    const json = await res.json();
-    setLoading(false);
+      if (!result.ok) {
+        setError(result.error.message);
+        if (result.error.code === "UNAUTHORIZED") {
+          router.push("/login?callbackUrl=/interventions/new");
+        }
+        return;
+      }
 
-    if (!res.ok) {
-      setError(json.error?.message ?? "No se pudo crear la intervención");
-      return;
+      router.push(`/interventions/${result.data.id}/map`);
+      router.refresh();
+    } finally {
+      setLoading(false);
     }
-
-    router.push(`/interventions/${json.data.id}/map`);
-    router.refresh();
   }
 
   return (

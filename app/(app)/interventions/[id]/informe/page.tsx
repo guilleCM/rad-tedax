@@ -1,9 +1,7 @@
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
-import {
-  AppError,
-  getInterventionWithOperationParticipants,
-} from "@/lib/services/interventions";
+import { AppError } from "@/lib/errors";
+import { getInterventionWithOperationParticipants } from "@/lib/services/interventions";
 import { canDeleteIntervention } from "@/lib/services/permissions";
 import { InterventionReportPanel } from "@/components/interventions/InterventionReportPanel";
 

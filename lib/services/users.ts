@@ -7,7 +7,7 @@ import {
   canDeleteUser,
   canListUsers,
 } from "@/lib/services/permissions";
-import { AppError } from "@/lib/services/interventions";
+import { AppError } from "@/lib/errors";
 import {
   deleteUserById,
   findAllUsers,

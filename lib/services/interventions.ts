@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import { calculateZones } from "@/domain/zones/calculateZones";
+import { AppError } from "@/lib/errors";
 import { geocodeAddress } from "@/lib/geocoding/nominatim";
 import {
   deleteInterventionById,
@@ -33,13 +34,22 @@ import {
 
 export { isOwner };
 
-export class AppError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-    public status: number = 400,
-  ) {
-    super(message);
+const GEOCODE_TIMEOUT_MS = 4_000;
+
+async function geocodeWithTimeout(
+  label: string,
+): Promise<[number, number] | undefined> {
+  try {
+    const result = await Promise.race([
+      geocodeAddress(label),
+      new Promise<null>((_, reject) => {
+        setTimeout(() => reject(new Error("GEOCODE_TIMEOUT")), GEOCODE_TIMEOUT_MS);
+      }),
+    ]);
+    return result ?? undefined;
+  } catch (error) {
+    console.warn(`Geocoding failed for "${label}":`, error);
+    return undefined;
   }
 }
 
@@ -179,7 +189,7 @@ export async function createIntervention(
 
   let coordinates = input.coordinates;
   if (!coordinates && input.locationLabel?.trim()) {
-    coordinates = (await geocodeAddress(input.locationLabel)) ?? undefined;
+    coordinates = await geocodeWithTimeout(input.locationLabel);
   }
 
   if (coordinates) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { jsonError, unauthorized } from "@/lib/api";
+import { formatZodError } from "@/lib/errors";
 import { createInterventionSchema } from "@/lib/validations/intervention";
 import {
   createIntervention,
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
         {
           error: {
             code: "VALIDATION",
-            message: "Datos inválidos",
+            message: formatZodError(parsed.error),
             details: parsed.error.flatten(),
           },
         },
