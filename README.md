@@ -83,6 +83,21 @@ El mapa ofrece dos capas en la propia interfaz: **Mapa** (calles, Esri World Str
 npm run seed
 ```
 
+Si aparecen errores intermitentes `ReplicaSetNoPrimary` o
+`MongoServerSelectionError`, comprueba:
+
+- **Atlas Network Access**: Vercel usa IPs de salida dinámicas salvo que el
+  proyecto tenga salida estática. En un MVP puede permitirse `0.0.0.0/0`,
+  manteniendo credenciales robustas y un usuario de base de datos con permisos
+  mínimos.
+- **Región**: configura la función de Vercel en una región próxima a la del
+  clúster de Atlas para reducir la latencia del handshake.
+- **Estado y límites del clúster**: revisa que Atlas no esté pausado y que no
+  haya alcanzado sus límites de conexiones.
+- **Diagnóstico**: consulta `GET /api/test-db` después de un periodo de
+  inactividad; responde `200` si el ping funciona y `503` si Atlas no está
+  disponible.
+
 ## Notas MVP
 
 - Sin registro público: usuarios vía `npm run seed`
