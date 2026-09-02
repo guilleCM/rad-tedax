@@ -79,8 +79,8 @@ export function FinalizeOperationButton({
         <div className="space-y-4">
           <p className="text-sm text-muted">
             {hasActiveSessions
-              ? "Se detendr?n las sesiones activas y la operaci?n quedar? cerrada. No podr?s volver a iniciar sesiones de intervinientes."
-              : "La operaci?n quedar? cerrada. No podr?s volver a iniciar sesiones de intervinientes."}
+              ? "Se detendrán las sesiones activas y la operación quedará cerrada. No podrás volver a iniciar sesiones de intervinientes."
+              : "La operación quedará cerrada. No podrás volver a iniciar sesiones de intervinientes."}
           </p>
 
           {error && (
@@ -102,7 +102,7 @@ export function FinalizeOperationButton({
               onClick={() => void handleClose()}
               disabled={closing}
             >
-              {closing ? "Finalizando?" : "Finalizar operación"}
+              {closing ? "Finalizando..." : "Finalizar operación"}
             </Button>
           </div>
         </div>

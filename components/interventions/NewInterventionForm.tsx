@@ -1,9 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { AlertCircle } from "lucide-react";
+import { useState, useTransition } from "react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api-client";
+import {
+  formatDatetimeLocal,
+  parseDatetimeLocal,
+} from "@/lib/datetime-local";
 import { Button, Input, Label } from "@/components/ui/forms";
 
 type Props = {
@@ -14,25 +18,31 @@ type CreatedIntervention = {
   id: string;
 };
 
+type FormPhase = "idle" | "creating" | "opening";
+
 export function NewInterventionForm({ defaultName }: Props) {
   const router = useRouter();
   const [name, setName] = useState(defaultName);
   const [zone, setZone] = useState("");
-  const [occurredAt, setOccurredAt] = useState(
-    () => new Date().toISOString().slice(0, 16),
+  const [occurredAt, setOccurredAt] = useState(() =>
+    formatDatetimeLocal(new Date()),
   );
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<FormPhase>("idle");
+  const [isNavigating, startTransition] = useTransition();
+
+  const busy = phase !== "idle" || isNavigating;
+  const statusLabel = phase === "creating" ? "Creando…" : "Abriendo mapa…";
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    setPhase("creating");
     setError(null);
 
-    const occurredDate = new Date(occurredAt);
-    if (Number.isNaN(occurredDate.getTime())) {
+    const occurredDate = parseDatetimeLocal(occurredAt);
+    if (!occurredDate) {
       setError("La fecha no es válida.");
-      setLoading(false);
+      setPhase("idle");
       return;
     }
 
@@ -43,35 +53,36 @@ export function NewInterventionForm({ defaultName }: Props) {
     const trimmedZone = zone.trim();
     if (trimmedZone) body.locationLabel = trimmedZone;
 
-    try {
-      const result = await apiFetch<CreatedIntervention>("/api/interventions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+    const result = await apiFetch<CreatedIntervention>("/api/interventions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
 
-      if (!result.ok) {
-        setError(result.error.message);
-        if (result.error.code === "UNAUTHORIZED") {
-          router.push("/login?callbackUrl=/interventions/new");
-        }
-        return;
+    if (!result.ok) {
+      setError(result.error.message);
+      setPhase("idle");
+      if (result.error.code === "UNAUTHORIZED") {
+        router.push("/login?callbackUrl=/interventions/new");
       }
+      return;
+    }
 
+    setPhase("opening");
+    startTransition(() => {
       router.push(`/interventions/${result.data.id}/map`);
       router.refresh();
-    } finally {
-      setLoading(false);
-    }
+    });
   }
 
   return (
-    <form onSubmit={onSubmit} className="mx-auto max-w-md space-y-4">
+    <form onSubmit={onSubmit} className="relative mx-auto max-w-md space-y-4">
       <div>
         <Label htmlFor="name">Nombre</Label>
         <Input
           id="name"
           required
+          disabled={busy}
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Ej. OP_RAD_1"
@@ -81,6 +92,7 @@ export function NewInterventionForm({ defaultName }: Props) {
         <Label htmlFor="zone">Zona de la operación</Label>
         <Input
           id="zone"
+          disabled={busy}
           value={zone}
           onChange={(e) => setZone(e.target.value)}
           placeholder="Calle X, Palma"
@@ -95,6 +107,7 @@ export function NewInterventionForm({ defaultName }: Props) {
           id="occurredAt"
           type="datetime-local"
           required
+          disabled={busy}
           value={occurredAt}
           onChange={(e) => setOccurredAt(e.target.value)}
         />
@@ -105,8 +118,15 @@ export function NewInterventionForm({ defaultName }: Props) {
           {error}
         </p>
       )}
-      <Button type="submit" disabled={loading} className="w-full">
-        {loading ? "Creando…" : "Crear y abrir mapa"}
+      <Button type="submit" disabled={busy} className="w-full">
+        {busy ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            {statusLabel}
+          </>
+        ) : (
+          "Crear y abrir mapa"
+        )}
       </Button>
     </form>
   );
