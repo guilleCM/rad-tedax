@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { apiFetch } from "@/lib/api-client";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button, Input, Label } from "@/components/ui/forms";
 
@@ -30,21 +31,20 @@ export function CreateIntervinienteDialog({ open, onClose, onSuccess }: Props) {
     setError(null);
     setMessage(null);
 
-    const res = await fetch("/api/users/participants", {
+    const result = await apiFetch<{ name: string }>("/api/users/participants", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     });
 
-    const json = await res.json();
     setSaving(false);
 
-    if (!res.ok) {
-      setError(json.error?.message ?? "No se pudo crear el interviniente");
+    if (!result.ok) {
+      setError(result.error.message);
       return;
     }
 
-    setMessage(`Interviniente ${json.data.name} registrado`);
+    setMessage(`Interviniente ${result.data.name} registrado`);
     setName("");
     onSuccess?.();
   }

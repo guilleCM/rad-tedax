@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { jsonError, unauthorized } from "@/lib/api";
+import { jsonData, jsonError, jsonValidationError, unauthorized } from "@/lib/api";
 import { createParticipantRegistrySchema } from "@/lib/validations/user";
 import { createParticipantRegistry } from "@/lib/services/users";
 
@@ -12,15 +11,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const parsed = createParticipantRegistrySchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json(
-        {
-          error: {
-            code: "VALIDATION",
-            message: "Datos inválidos",
-            details: parsed.error.flatten(),
-          },
-        },
-        { status: 400 },
+      return jsonValidationError(
+        "Datos inválidos",
+        parsed.error.flatten(),
       );
     }
 
@@ -29,7 +22,7 @@ export async function POST(request: Request) {
       session.user.id,
       parsed.data,
     );
-    return NextResponse.json({ data }, { status: 201 });
+    return jsonData(data, 201);
   } catch (error) {
     return jsonError(error);
   }

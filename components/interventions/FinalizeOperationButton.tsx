@@ -6,6 +6,7 @@ import { MapPinCheck } from "lucide-react";
 import { usePatchInterventionHeader } from "@/components/interventions/InterventionHeaderContext";
 import { Button } from "@/components/ui/forms";
 import { Dialog } from "@/components/ui/Dialog";
+import { apiFetch } from "@/lib/api-client";
 import type { InterventionStatus } from "@/lib/types";
 
 type Props = {
@@ -37,17 +38,15 @@ export function FinalizeOperationButton({
     setClosing(true);
     setError(null);
 
-    const res = await fetch(`/api/interventions/${interventionId}`, {
+    const result = await apiFetch(`/api/interventions/${interventionId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "closed" }),
     });
-
-    const json = await res.json();
     setClosing(false);
 
-    if (!res.ok) {
-      setError(json.error?.message ?? "No se pudo finalizar la operación");
+    if (!result.ok) {
+      setError(result.error.message);
       return;
     }
 
@@ -80,8 +79,8 @@ export function FinalizeOperationButton({
         <div className="space-y-4">
           <p className="text-sm text-muted">
             {hasActiveSessions
-              ? "Se detendrán las sesiones activas y la operación quedará cerrada. No podrás volver a iniciar sesiones de intervinientes."
-              : "La operación quedará cerrada. No podrás volver a iniciar sesiones de intervinientes."}
+              ? "Se detendr?n las sesiones activas y la operaci?n quedar? cerrada. No podr?s volver a iniciar sesiones de intervinientes."
+              : "La operaci?n quedar? cerrada. No podr?s volver a iniciar sesiones de intervinientes."}
           </p>
 
           {error && (
@@ -103,7 +102,7 @@ export function FinalizeOperationButton({
               onClick={() => void handleClose()}
               disabled={closing}
             >
-              {closing ? "Finalizando…" : "Finalizar operación"}
+              {closing ? "Finalizando?" : "Finalizar operación"}
             </Button>
           </div>
         </div>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { UserRole } from "@/lib/types";
+import { apiFetch } from "@/lib/api-client";
 import { canDeleteUserByRole, roleLabel } from "@/lib/services/permissions";
 import { Button } from "@/components/ui/forms";
 import { Dialog } from "@/components/ui/Dialog";
@@ -36,33 +37,31 @@ export function UsersAdminPanel({ actorRole, actorId }: Props) {
   const loadUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const res = await fetch("/api/users");
-    const json = await res.json();
+    const result = await apiFetch<SerializedUser[]>("/api/users");
     setLoading(false);
 
-    if (!res.ok) {
-      setError(json.error?.message ?? "No se pudo cargar la lista");
+    if (!result.ok) {
+      setError(result.error.message);
       return;
     }
 
-    setUsers(json.data);
+    setUsers(result.data);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
-      const res = await fetch("/api/users");
-      const json = await res.json();
+      const result = await apiFetch<SerializedUser[]>("/api/users");
       if (cancelled) return;
 
-      if (!res.ok) {
-        setError(json.error?.message ?? "No se pudo cargar la lista");
+      if (!result.ok) {
+        setError(result.error.message);
         setLoading(false);
         return;
       }
 
-      setUsers(json.data);
+      setUsers(result.data);
       setLoading(false);
     })();
 
@@ -81,12 +80,11 @@ export function UsersAdminPanel({ actorRole, actorId }: Props) {
     }
 
     setDeletingId(user.id);
-    const res = await fetch(`/api/users/${user.id}`, { method: "DELETE" });
+    const result = await apiFetch(`/api/users/${user.id}`, { method: "DELETE" });
     setDeletingId(null);
 
-    if (!res.ok) {
-      const json = await res.json();
-      setError(json.error?.message ?? "No se pudo eliminar");
+    if (!result.ok) {
+      setError(result.error.message);
       return;
     }
 

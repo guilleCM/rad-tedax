@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AlertCircle } from "lucide-react";
 import type { UserRole } from "@/lib/types";
+import { apiFetch } from "@/lib/api-client";
 import { roleLabel } from "@/lib/services/permissions";
 import { Button, Input, Label } from "@/components/ui/forms";
 
@@ -30,24 +31,23 @@ export function CreateUserForm({ actorRole, onSuccess, onCancel }: Props) {
     setSaving(true);
     setError(null);
 
-    const res = isParticipantOnly
-      ? await fetch("/api/users/participants", {
+    const result = isParticipantOnly
+      ? await apiFetch("/api/users/participants", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name }),
         })
-      : await fetch("/api/users", {
+      : await apiFetch("/api/users", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, email, password, role }),
         });
 
-    const json = await res.json();
     setSaving(false);
 
-    if (!res.ok) {
+    if (!result.ok) {
       setError(
-        json.error?.message ??
+        result.error.message ??
           (isParticipantOnly
             ? "No se pudo crear el interviniente"
             : "No se pudo crear el usuario"),

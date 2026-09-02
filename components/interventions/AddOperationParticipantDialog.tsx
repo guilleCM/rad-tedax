@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search, UserRound } from "lucide-react";
 import { Button, Input, Label } from "@/components/ui/forms";
 import { Dialog } from "@/components/ui/Dialog";
+import { apiFetch } from "@/lib/api-client";
 import { ParticipantAvatar } from "@/components/interventions/participant-ui";
 import type { SerializedOperationParticipant } from "@/components/interventions/operation-participant-types";
 import { OPERATION_TEAM_LABELS } from "@/components/interventions/operation-participant-types";
@@ -44,17 +45,16 @@ export function AddOperationParticipantDialog({
     let cancelled = false;
 
     (async () => {
-      const res = await fetch("/api/users");
-      const json = await res.json();
+      const result = await apiFetch<RegistryUser[]>("/api/users");
       if (cancelled) return;
 
-      if (!res.ok) {
-        setError(json.error?.message ?? "No se pudieron cargar intervinientes");
+      if (!result.ok) {
+        setError(result.error.message);
         return;
       }
 
       setUsers(
-        (json.data as RegistryUser[]).filter((user) => user.role === "participant"),
+        result.data.filter((user) => user.role === "participant"),
       );
       setLoaded(true);
     })();
@@ -89,7 +89,7 @@ export function AddOperationParticipantDialog({
 
     setSaving(true);
     setError(null);
-    const res = await fetch(
+    const result = await apiFetch<SerializedOperationParticipant>(
       `/api/interventions/${interventionId}/operation-participants`,
       {
         method: "POST",
@@ -97,15 +97,14 @@ export function AddOperationParticipantDialog({
         body: JSON.stringify({ userId: selectedUserId, team }),
       },
     );
-    const json = await res.json();
     setSaving(false);
 
-    if (!res.ok) {
-      setError(json.error?.message ?? "No se pudo añadir el interviniente");
+    if (!result.ok) {
+      setError(result.error.message);
       return;
     }
 
-    onAdded(json.data);
+    onAdded(result.data);
     handleClose();
   }
 

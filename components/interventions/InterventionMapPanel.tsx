@@ -5,6 +5,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Pencil, Radiation, Flag, FilePen } from "lucide-react";
 import type { ZoneFeature } from "@/domain/zones/types";
+import { apiFetch } from "@/lib/api-client";
 import { FinalizeOperationButton } from "@/components/interventions/FinalizeOperationButton";
 import { useReportInterventionSave } from "@/components/interventions/InterventionHeaderContext";
 import { Button, Input, Label } from "@/components/ui/forms";
@@ -348,18 +349,16 @@ export function InterventionMapPanel({
       reportSaveState("saving");
       setError(null);
 
-      const res = await fetch(`/api/interventions/${intervention.id}`, {
+      const result = await apiFetch(`/api/interventions/${intervention.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(buildPersistBody(intervention, snapshot)),
       });
-
-      const json = await res.json();
       savingRef.current = false;
 
-      if (!res.ok) {
+      if (!result.ok) {
         reportSaveState("idle");
-        setError(json.error?.message ?? "No se pudo guardar");
+        setError(result.error.message);
         if (pendingPersistRef.current) {
           pendingPersistRef.current = false;
           void persistMapStateRef.current();

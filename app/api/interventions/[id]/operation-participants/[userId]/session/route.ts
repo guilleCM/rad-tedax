@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { jsonError, unauthorized } from "@/lib/api";
+import { jsonData, jsonError, jsonValidationError, unauthorized } from "@/lib/api";
 import {
   objectIdSchema,
   sessionActionSchema,
@@ -20,38 +19,23 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const { id, userId } = await context.params;
     if (!objectIdSchema.safeParse(id).success) {
-      return NextResponse.json(
-        { error: { code: "VALIDATION", message: "Id inválido" } },
-        { status: 400 },
-      );
+      return jsonValidationError("Id inválido");
     }
     if (!objectIdSchema.safeParse(userId).success) {
-      return NextResponse.json(
-        { error: { code: "VALIDATION", message: "userId inválido" } },
-        { status: 400 },
-      );
+      return jsonValidationError("userId inválido");
     }
 
     const body = await request.json();
     const parsed = sessionActionSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json(
-        {
-          error: {
-            code: "VALIDATION",
-            message: "Datos inválidos",
-            details: parsed.error.flatten(),
-          },
-        },
-        { status: 400 },
+      return jsonValidationError(
+        "Datos inválidos",
+        parsed.error.flatten(),
       );
     }
 
     if (parsed.data.action !== "start") {
-      return NextResponse.json(
-        { error: { code: "VALIDATION", message: "Acción no válida" } },
-        { status: 400 },
-      );
+      return jsonValidationError("Acción no válida");
     }
 
     const data = await startParticipantSession(
@@ -61,7 +45,7 @@ export async function POST(request: Request, context: RouteContext) {
       userId,
       parsed.data.zone,
     );
-    return NextResponse.json({ data });
+    return jsonData(data);
   } catch (error) {
     return jsonError(error);
   }
@@ -74,30 +58,18 @@ export async function PATCH(request: Request, context: RouteContext) {
   try {
     const { id, userId } = await context.params;
     if (!objectIdSchema.safeParse(id).success) {
-      return NextResponse.json(
-        { error: { code: "VALIDATION", message: "Id inválido" } },
-        { status: 400 },
-      );
+      return jsonValidationError("Id inválido");
     }
     if (!objectIdSchema.safeParse(userId).success) {
-      return NextResponse.json(
-        { error: { code: "VALIDATION", message: "userId inválido" } },
-        { status: 400 },
-      );
+      return jsonValidationError("userId inválido");
     }
 
     const body = await request.json();
     const parsed = sessionActionSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json(
-        {
-          error: {
-            code: "VALIDATION",
-            message: "Datos inválidos",
-            details: parsed.error.flatten(),
-          },
-        },
-        { status: 400 },
+      return jsonValidationError(
+        "Datos inválidos",
+        parsed.error.flatten(),
       );
     }
 
@@ -117,7 +89,7 @@ export async function PATCH(request: Request, context: RouteContext) {
             userId,
           );
 
-    return NextResponse.json({ data });
+    return jsonData(data);
   } catch (error) {
     return jsonError(error);
   }

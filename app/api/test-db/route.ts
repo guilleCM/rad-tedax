@@ -1,16 +1,16 @@
-import { NextResponse } from "next/server";
+import { jsonOk } from "@/lib/api";
 import { getDb } from "@/lib/db";
 
 export async function GET() {
   try {
     const db = await getDb();
     await db.command({ ping: 1 });
-    return NextResponse.json({ ok: true });
+    return jsonOk({ ok: true });
   } catch (error) {
     console.error("[test-db]", error);
-    return NextResponse.json(
+    return jsonOk(
       { ok: false, error: error instanceof Error ? error.name : "Unknown" },
-      { status: 503 },
+      503,
     );
   }
 }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
+import { apiFetch } from "@/lib/api-client";
 import { Button } from "@/components/ui/forms";
 
 export function DeleteInterventionButton({
@@ -26,15 +27,14 @@ export function DeleteInterventionButton({
     setDeleting(true);
     setError(null);
 
-    const res = await fetch(`/api/interventions/${interventionId}`, {
+    const result = await apiFetch(`/api/interventions/${interventionId}`, {
       method: "DELETE",
     });
 
     setDeleting(false);
 
-    if (!res.ok) {
-      const json = await res.json();
-      setError(json.error?.message ?? "No se pudo eliminar");
+    if (!result.ok) {
+      setError(result.error.message);
       return;
     }
 

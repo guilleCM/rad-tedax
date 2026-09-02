@@ -13,9 +13,7 @@ export default auth((req) => {
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/test-db") ||
     pathname.startsWith("/icons") ||
-    pathname === "/manifest.webmanifest" ||
-    pathname.startsWith("/sw") ||
-    pathname.startsWith("/~offline");
+    pathname === "/manifest.webmanifest";
 
   if (isPublic) {
     if (isLoggedIn && pathname.startsWith("/login")) {

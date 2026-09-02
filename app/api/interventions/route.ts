@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { jsonError, unauthorized } from "@/lib/api";
+import { jsonData, jsonError, jsonValidationError, unauthorized } from "@/lib/api";
 import { formatZodError } from "@/lib/errors";
 import { createInterventionSchema } from "@/lib/validations/intervention";
 import {
@@ -14,7 +13,7 @@ export async function GET() {
 
   try {
     const data = await listInterventions(session.user.id, session.user.role);
-    return NextResponse.json({ data });
+    return jsonData(data);
   } catch (error) {
     return jsonError(error);
   }
@@ -28,15 +27,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const parsed = createInterventionSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json(
-        {
-          error: {
-            code: "VALIDATION",
-            message: formatZodError(parsed.error),
-            details: parsed.error.flatten(),
-          },
-        },
-        { status: 400 },
+      return jsonValidationError(
+        formatZodError(parsed.error),
+        parsed.error.flatten(),
       );
     }
 
@@ -49,7 +42,7 @@ export async function POST(request: Request) {
       zoneParams: parsed.data.zoneParams,
     });
 
-    return NextResponse.json({ data }, { status: 201 });
+    return jsonData(data, 201);
   } catch (error) {
     return jsonError(error);
   }

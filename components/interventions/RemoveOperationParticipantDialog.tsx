@@ -9,6 +9,7 @@ import {
 import { ParticipantAvatar } from "@/components/interventions/participant-ui";
 import { Button, Input, Label } from "@/components/ui/forms";
 import { Dialog } from "@/components/ui/Dialog";
+import { apiFetch } from "@/lib/api-client";
 
 type Props = {
   open: boolean;
@@ -58,7 +59,7 @@ export function RemoveOperationParticipantDialog({
     setError(null);
 
     if (selected.isActive) {
-      const stopRes = await fetch(
+      const stopResult = await apiFetch(
         `/api/interventions/${interventionId}/operation-participants/${selectedUserId}/session`,
         {
           method: "PATCH",
@@ -66,23 +67,21 @@ export function RemoveOperationParticipantDialog({
           body: JSON.stringify({ action: "stop" }),
         },
       );
-      const stopJson = await stopRes.json();
-      if (!stopRes.ok) {
+      if (!stopResult.ok) {
         setRemoving(false);
-        setError(stopJson.error?.message ?? "No se pudo detener la sesión");
+        setError(stopResult.error.message);
         return;
       }
     }
 
-    const deleteRes = await fetch(
+    const deleteResult = await apiFetch(
       `/api/interventions/${interventionId}/operation-participants?userId=${selectedUserId}`,
       { method: "DELETE" },
     );
-    const deleteJson = await deleteRes.json();
     setRemoving(false);
 
-    if (!deleteRes.ok) {
-      setError(deleteJson.error?.message ?? "No se pudo retirar el interviniente");
+    if (!deleteResult.ok) {
+      setError(deleteResult.error.message);
       return;
     }
 

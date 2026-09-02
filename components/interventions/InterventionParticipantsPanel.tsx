@@ -10,6 +10,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { AddOperationParticipantDialog } from "@/components/interventions/AddOperationParticipantDialog";
+import { apiFetch } from "@/lib/api-client";
 import { usePatchInterventionHeader } from "@/components/interventions/InterventionHeaderContext";
 import { OperationHistoryDialog } from "@/components/interventions/OperationHistoryDialog";
 import { OperationParticipantCard } from "@/components/interventions/OperationParticipantCard";
@@ -149,21 +150,22 @@ export function InterventionParticipantsPanel({
     setError(null);
     setMessage(null);
 
-    const res = await fetch(`/api/interventions/${interventionId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ operationDosimetry: next }),
-    });
-
-    const json = await res.json();
+    const result = await apiFetch<{ operationDosimetry: OperationDosimetry }>(
+      `/api/interventions/${interventionId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operationDosimetry: next }),
+      },
+    );
     setSaving(false);
 
-    if (!res.ok) {
-      setError(json.error?.message ?? "No se pudo guardar la configuración");
+    if (!result.ok) {
+      setError(result.error.message);
       return;
     }
 
-    setDosimetry(json.data.operationDosimetry);
+    setDosimetry(result.data.operationDosimetry);
     setEditingDose(false);
     setMessage("Configuración guardada");
     router.refresh();

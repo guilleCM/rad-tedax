@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { SessionProvider } from "@/components/auth/SessionProvider";
+import { ServiceWorkerCleanup } from "@/components/pwa/ServiceWorkerCleanup";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { themeInitScript } from "@/components/theme/theme-script";
 import "./globals.css";
@@ -52,6 +53,7 @@ export default function RootLayout({
       </head>
       <body className="flex min-h-full flex-col bg-background text-foreground">
         <ThemeProvider>
+          <ServiceWorkerCleanup />
           <SessionProvider>{children}</SessionProvider>
         </ThemeProvider>
       </body>

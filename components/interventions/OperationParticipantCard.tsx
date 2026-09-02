@@ -11,12 +11,9 @@ import {
   OPERATION_TEAM_LABELS,
   type SerializedOperationParticipant,
 } from "@/components/interventions/operation-participant-types";
-import {
-  ParticipantAvatar,
-  ParticipantDoseProgressRow,
-  ZoneRadioToggle,
-} from "@/components/interventions/participant-ui";
+import { ParticipantAvatar, ParticipantDoseProgressRow, ZoneRadioToggle } from "@/components/interventions/participant-ui";
 import { useLiveClock } from "@/components/interventions/useLiveClock";
+import { apiFetch } from "@/lib/api-client";
 import {
   dosePercentOfLimit,
   formatAccumulatedDoseMsv,
@@ -86,27 +83,26 @@ export function OperationParticipantCard({
     setActing(true);
 
     const url = `/api/interventions/${interventionId}/operation-participants/${participant.userId}/session`;
-    const res = participant.isActive
-      ? await fetch(url, {
+    const result = participant.isActive
+      ? await apiFetch<SessionResponse>(url, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "stop" }),
         })
-      : await fetch(url, {
+      : await apiFetch<SessionResponse>(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "start", zone: selectedZone }),
         });
 
-    const json = await res.json();
     setActing(false);
 
-    if (!res.ok) {
-      onError(json.error?.message ?? "No se pudo actualizar la sesión");
+    if (!result.ok) {
+      onError(result.error.message);
       return;
     }
 
-    const data = json.data as SessionResponse;
+    const data = result.data;
     if (data.interventionStatus === "active") {
       onInterventionActivated?.();
     }
@@ -123,7 +119,7 @@ export function OperationParticipantCard({
     }
 
     setActing(true);
-    const res = await fetch(
+    const result = await apiFetch<SerializedOperationParticipant>(
       `/api/interventions/${interventionId}/operation-participants/${participant.userId}/session`,
       {
         method: "PATCH",
@@ -131,15 +127,14 @@ export function OperationParticipantCard({
         body: JSON.stringify({ action: "changeZone", zone }),
       },
     );
-    const json = await res.json();
     setActing(false);
 
-    if (!res.ok) {
-      onError(json.error?.message ?? "No se pudo cambiar de zona");
+    if (!result.ok) {
+      onError(result.error.message);
       return;
     }
 
-    onSessionChange(json.data);
+    onSessionChange(result.data);
   }
 
   return (

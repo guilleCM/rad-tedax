@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { jsonError, unauthorized } from "@/lib/api";
+import { jsonData, jsonError, jsonValidationError, unauthorized } from "@/lib/api";
 import { objectIdSchema } from "@/lib/validations/intervention";
 import { recalculateIntervention } from "@/lib/services/interventions";
 
@@ -14,10 +13,7 @@ export async function POST(_request: Request, context: RouteContext) {
     const { id } = await context.params;
     const idResult = objectIdSchema.safeParse(id);
     if (!idResult.success) {
-      return NextResponse.json(
-        { error: { code: "VALIDATION", message: "Id inválido" } },
-        { status: 400 },
-      );
+      return jsonValidationError("Id inválido");
     }
 
     const data = await recalculateIntervention(
@@ -25,7 +21,7 @@ export async function POST(_request: Request, context: RouteContext) {
       session.user.id,
       session.user.role,
     );
-    return NextResponse.json({ data });
+    return jsonData(data);
   } catch (error) {
     return jsonError(error);
   }

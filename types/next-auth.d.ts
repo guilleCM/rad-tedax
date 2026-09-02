@@ -1,5 +1,3 @@
-/// <reference types="@serwist/next/typings" />
-
 import type { UserRole } from "@/lib/types";
 
 declare module "next-auth" {

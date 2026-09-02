@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { jsonError, unauthorized } from "@/lib/api";
+import { jsonData, jsonError, jsonValidationError, unauthorized } from "@/lib/api";
 import {
   addOperationParticipantSchema,
   objectIdSchema,
@@ -19,24 +18,15 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
     if (!objectIdSchema.safeParse(id).success) {
-      return NextResponse.json(
-        { error: { code: "VALIDATION", message: "Id inválido" } },
-        { status: 400 },
-      );
+      return jsonValidationError("Id inválido");
     }
 
     const body = await request.json();
     const parsed = addOperationParticipantSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json(
-        {
-          error: {
-            code: "VALIDATION",
-            message: "Datos inválidos",
-            details: parsed.error.flatten(),
-          },
-        },
-        { status: 400 },
+      return jsonValidationError(
+        "Datos inválidos",
+        parsed.error.flatten(),
       );
     }
 
@@ -46,7 +36,7 @@ export async function POST(request: Request, context: RouteContext) {
       session.user.role,
       parsed.data,
     );
-    return NextResponse.json({ data }, { status: 201 });
+    return jsonData(data, 201);
   } catch (error) {
     return jsonError(error);
   }
@@ -59,20 +49,14 @@ export async function DELETE(request: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
     if (!objectIdSchema.safeParse(id).success) {
-      return NextResponse.json(
-        { error: { code: "VALIDATION", message: "Id inválido" } },
-        { status: 400 },
-      );
+      return jsonValidationError("Id inválido");
     }
 
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
     const userIdResult = objectIdSchema.safeParse(userId);
     if (!userIdResult.success) {
-      return NextResponse.json(
-        { error: { code: "VALIDATION", message: "userId inválido" } },
-        { status: 400 },
-      );
+      return jsonValidationError("userId inválido");
     }
 
     const data = await removeOperationParticipant(
@@ -81,7 +65,7 @@ export async function DELETE(request: Request, context: RouteContext) {
       session.user.role,
       userIdResult.data,
     );
-    return NextResponse.json({ data });
+    return jsonData(data);
   } catch (error) {
     return jsonError(error);
   }

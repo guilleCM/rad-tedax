@@ -97,7 +97,7 @@ Documentar la actuación en un único informe.
 | Estación de descontaminación | Planificado |
 | Dosimetría y relevos | Planificado |
 | Informe operativo | Planificado |
-| PWA offline (shell + `/~offline`) | Implementado (sin sync de datos ni mapas offline) |
+| PWA instalable (manifest, sin SW) | Implementado (sin offline ni caché de datos) |
 | Registro público de usuarios | No previsto (seed o admin) |
 
 ## Roles y permisos
@@ -154,7 +154,7 @@ lib/types.ts      → tipos de documentos MongoDB y dominio
 ## Stack tecnológico
 
 - **Frontend**: Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4, Lucide icons.
-- **PWA**: Serwist (`next.config.ts`, `app/sw.ts`); offline limitado a shell + `/~offline`.
+- **PWA**: manifest web (`app/manifest.ts`); instalable en pantalla de inicio, sin service worker ni offline. Limpieza de SW legacy en `components/pwa/ServiceWorkerCleanup.tsx`.
 - **Auth**: Auth.js v5 (NextAuth), JWT en cookie httpOnly, Credentials provider (`lib/auth.ts`, `middleware.ts`).
 - **Datos**: MongoDB driver oficial (`lib/db.ts`); colecciones `users`, `interventions`.
 - **Mapas**: MapLibre GL; tiles Esri; geocoding Nominatim (`lib/geocoding/`).
@@ -188,7 +188,8 @@ Definido en `lib/types.ts`.
 
 ## Convenciones de código
 
-- Respuestas API: `{ data }` en éxito; `{ error: { code, message } }` en fallo (`lib/api.ts`).
+- Respuestas API: `{ data }` en éxito; `{ error: { code, message } }` en fallo; helpers `jsonData` / `jsonError` en `lib/api.ts` con `Cache-Control: no-store`.
+- Peticiones cliente: usar `apiFetch` de `lib/api-client.ts` (mensajes de red explícitos).
 - Coordenadas GeoJSON: siempre `[longitude, latitude]`.
 - UI y mensajes de usuario: **español (es-ES)**.
 - Mapa: import dinámico con `ssr: false` (ver `InterventionMapPanel.tsx`).
@@ -228,7 +229,7 @@ if (initialValue !== prevInitial) {
 2. `npm install && npm run seed` → usuario gestor `manager@example.com` / `changeme123`.
 3. `npm run dev` — abrir http://localhost:3000.
 4. `npm test` — tests unitarios.
-5. Build de producción usa `next build --webpack` (Serwist requiere webpack).
+5. Build de producción: `npm run build` (`next build`).
 
 ## Al implementar nuevas features
 

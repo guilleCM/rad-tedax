@@ -9,7 +9,7 @@ PWA para gestionar intervenciones radiológicas: autenticación, CRUD, mapa MapL
 - MongoDB (driver oficial)
 - MapLibre + Esri (calles y satélite)
 - Turf.js (`@turf/circle`) para el cálculo de zonas
-- Serwist (PWA)
+- Web App Manifest (instalable, sin service worker)
 
 ## Requisitos
 
@@ -50,7 +50,7 @@ Abre [http://localhost:3000](http://localhost:3000).
 | Script | Descripción |
 | --- | --- |
 | `npm run dev` | Servidor de desarrollo |
-| `npm run build` | Build de producción (+ service worker) |
+| `npm run build` | Build de producción |
 | `npm run start` | Servidor de producción |
 | `npm run seed` | Crea/actualiza usuario gestor e índices |
 | `npm test` | Tests unitarios (`calculateZones`) |
@@ -75,7 +75,7 @@ El mapa ofrece dos capas en la propia interfaz: **Mapa** (calles, Esri World Str
    - `MONGODB_URI`
    - `MONGODB_DB` (opcional)
    - `AUTH_SECRET`
-4. El build usa `next build --webpack` para generar el service worker con Serwist.
+4. El build usa `next build` (sin service worker).
 5. Tras el primer deploy, ejecuta el seed contra Atlas:
 
 ```bash
@@ -87,5 +87,6 @@ npm run seed
 
 - Sin registro público: usuarios vía `npm run seed`
 - Fórmula de zonas: placeholder concéntrico (`v1-placeholder`)
-- Offline: shell PWA + página `/~offline`; sin sync de datos ni mapas offline aún
+- PWA instalable vía manifest; requiere conexión (sin offline ni service worker)
+- Errores de red visibles en UI vía `apiFetch` (`lib/api-client.ts`)
 - En Windows, usa siempre la misma capitalización de ruta del proyecto al desarrollar/compilar

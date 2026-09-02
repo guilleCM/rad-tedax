@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build --webpack",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
@@ -13,7 +13,6 @@
     "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
-    "@serwist/next": "^9.5.12",
     "@turf/circle": "^7.4.0",
     "@turf/helpers": "^7.4.0",
     "@vercel/functions": "^3.9.5",
@@ -27,7 +26,6 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-map-gl": "^8.1.2",
-    "serwist": "^9.5.12",
     "zod": "^4.5.2"
   },
   "devDependencies": {
