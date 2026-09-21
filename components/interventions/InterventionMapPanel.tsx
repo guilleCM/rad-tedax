@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Pencil, Radiation, Flag, FilePen } from "lucide-react";
+import { AlertCircle, Gauge, Icon, Pencil, Radiation, FilePen, Trash2 } from "lucide-react";
 import type { ZoneFeature } from "@/domain/zones/types";
 import { apiFetch } from "@/lib/api-client";
 import { FinalizeOperationButton } from "@/components/interventions/FinalizeOperationButton";
@@ -14,18 +14,48 @@ import type { MapPlacementMode } from "@/components/map/InterventionMap";
 import {
   DEFAULT_LIMIT_ZONE_I,
   DEFAULT_LIMIT_ZONE_II,
+  TACTICAL_POINT_KINDS,
   type DoseLimitBound,
-  type DoseLimitOp,
   type DoseUnit,
   type InterventionStatus,
+  type TacticalPointKind,
   type ZoneIILimit,
 } from "@/lib/types";
 import {
-  DOSE_LIMIT_OPS,
+  TACTICAL_POINT_LABELS,
+  TACTICAL_POINT_PLACE_HINTS,
+  tacticalPointsFromOverrides,
+  tacticalPointsToOverridePayload,
+  type TacticalPointCoordinates,
+} from "@/lib/map/tacticalPoints";
+import { TACTICAL_POINT_ICON_NODES } from "@/lib/map/tacticalPointIcons";
+import {
+  formatAnnotationTime,
+  resolveAnnotations,
+  type AnnotationRecord,
+} from "@/domain/dosimetry/annotations";
+import {
+  beltCopy,
+  distanceMeters,
+  INITIAL_CORDON_INNER_METERS,
+  INITIAL_CORDON_OUTER_METERS,
+  INVERSE_SQUARE_FORMULA,
+  radiiFromAlertReading,
+  type ZoningPhase,
+} from "@/domain/zones/inverseSquare";
+import {
   DOSE_UNITS,
   formatZoneILimit,
   formatZoneIILimit,
 } from "@/lib/zones/formatDoseLimit";
+
+const TACTICAL_POINT_BORDER: Record<TacticalPointKind, string> = {
+  controlPoint: "!border-green-600",
+  decontaminationStation: "!border-fuchsia-600",
+  advancedCommandPost: "!border-indigo-600",
+  entryExit:
+    "!border-[3px] !border-transparent !text-slate-100 ![background-image:linear-gradient(#1e293b,#1e293b),repeating-linear-gradient(45deg,#22c55e_0_4px,#111111_4px_8px)] ![background-clip:padding-box,border-box] ![background-origin:border-box] hover:![background-image:linear-gradient(#334155,#334155),repeating-linear-gradient(45deg,#22c55e_0_4px,#111111_4px_8px)]",
+};
 
 const InterventionMap = dynamic(
   () =>
@@ -43,6 +73,7 @@ const InterventionMap = dynamic(
 type SerializedIntervention = {
   id: string;
   name: string;
+  occurredAt?: string;
   location: {
     point: { type: "Point"; coordinates: [number, number] };
     label: string | null;
@@ -53,6 +84,8 @@ type SerializedIntervention = {
     radiusZoneIIMeters: number;
     limitZoneI?: DoseLimitBound;
     limitZoneII?: ZoneIILimit;
+    zoningPhase?: ZoningPhase;
+    zoneIEstimated?: boolean;
   };
   zones: {
     zoneI: ZoneFeature;
@@ -62,7 +95,27 @@ type SerializedIntervention = {
     zoneI?: ZoneFeature;
     zoneII?: ZoneFeature;
     notes?: string;
+    annotations?: Array<{
+      text: string;
+      createdAt?: string | null;
+    }>;
     controlPoint?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+    decontaminationStation?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+    advancedCommandPost?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+    entryExit?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+    alertReading?: {
       type: "Point";
       coordinates: [number, number];
     };
@@ -73,40 +126,58 @@ type EditingZone = "I" | "II" | null;
 
 type MapPersistSnapshot = {
   coordinates: [number, number] | null;
-  controlPoint: [number, number] | null;
+  tacticalPoints: TacticalPointCoordinates;
+  alertReading: [number, number] | null;
   radiusI: number;
   radiusII: number;
   limitZoneI: DoseLimitBound;
   limitZoneII: ZoneIILimit;
-  notes: string;
+  annotations: AnnotationRecord[];
+  zoningPhase: ZoningPhase;
+  zoneIEstimated: boolean;
+  formulaVersion: string;
 };
+
+function loadAnnotations(intervention: SerializedIntervention): AnnotationRecord[] {
+  return resolveAnnotations(intervention.manualOverrides).map((annotation) => ({
+    text: annotation.text,
+    createdAt:
+      annotation.createdAt ?? intervention.occurredAt ?? new Date().toISOString(),
+  }));
+}
 
 function serializePersistPayload(snapshot: MapPersistSnapshot): string {
   return JSON.stringify(snapshot);
 }
 
-function buildPersistBody(
-  intervention: SerializedIntervention,
-  snapshot: MapPersistSnapshot,
-) {
+function buildPersistBody(snapshot: MapPersistSnapshot) {
   return {
     coordinates: snapshot.coordinates,
     zoneParams: {
-      formulaVersion: intervention.zoneParams.formulaVersion,
+      formulaVersion: snapshot.formulaVersion,
       radiusZoneIMeters: snapshot.radiusI,
       radiusZoneIIMeters: snapshot.radiusII,
       limitZoneI: snapshot.limitZoneI,
       limitZoneII: snapshot.limitZoneII,
+      zoningPhase: snapshot.zoningPhase,
+      zoneIEstimated: snapshot.zoneIEstimated,
     },
     manualOverrides: {
-      notes: snapshot.notes,
-      controlPoint: snapshot.controlPoint
-        ? { type: "Point" as const, coordinates: snapshot.controlPoint }
+      notes: "",
+      annotations: snapshot.annotations.flatMap((annotation) =>
+        annotation.createdAt
+          ? [{ text: annotation.text, createdAt: annotation.createdAt }]
+          : [],
+      ),
+      ...tacticalPointsToOverridePayload(snapshot.tacticalPoints),
+      alertReading: snapshot.alertReading
+        ? { type: "Point" as const, coordinates: snapshot.alertReading }
         : null,
     },
     recalculate: true,
   };
 }
+
 
 function DoseBoundFields({
   idPrefix,
@@ -118,24 +189,7 @@ function DoseBoundFields({
   onChange: (next: DoseLimitBound) => void;
 }) {
   return (
-    <div className="grid grid-cols-[1fr_auto_auto] gap-2">
-      <div>
-        <Label htmlFor={`${idPrefix}-op`}>Operador</Label>
-        <select
-          id={`${idPrefix}-op`}
-          className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none ring-ring focus:ring-2"
-          value={bound.op}
-          onChange={(e) =>
-            onChange({ ...bound, op: e.target.value as DoseLimitOp })
-          }
-        >
-          {DOSE_LIMIT_OPS.map((op) => (
-            <option key={op.value} value={op.value}>
-              {op.label}
-            </option>
-          ))}
-        </select>
-      </div>
+    <div className="grid grid-cols-2 gap-2">
       <div>
         <Label htmlFor={`${idPrefix}-value`}>Valor</Label>
         <Input
@@ -172,54 +226,73 @@ function DoseBoundFields({
 
 function ZoneSummaryCard({
   title,
-  colorClass,
+  tone,
   limitText,
+  note,
   radiusMeters,
   onEdit,
   readOnly,
 }: {
   title: string;
-  colorClass: string;
-  limitText: string;
+  tone: "red" | "orange";
+  limitText: string | null;
+  note: string | null;
   radiusMeters: number;
   onEdit: () => void;
   readOnly: boolean;
 }) {
-  return (
-    <div className="rounded-lg bg-surface p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span
-              className={`h-2.5 w-2.5 shrink-0 rounded-full ${colorClass}`}
-              aria-hidden
-            />
-            <p className="truncate text-sm font-semibold text-foreground">
-              {title}
-            </p>
-          </div>
-          <div className="mt-2 space-y-0.5 pl-4.5 text-xs text-muted">
+  const toneClass =
+    tone === "red"
+      ? "border-2 border-red-500 bg-surface"
+      : "border-2 border-orange-500 bg-surface";
+  const dotClass = tone === "red" ? "bg-red-500" : "bg-orange-500";
+
+  const body = (
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span
+            className={`h-2.5 w-2.5 shrink-0 rounded-full ${dotClass}`}
+            aria-hidden
+          />
+          <p className="truncate text-sm font-semibold text-foreground">
+            {title}
+          </p>
+        </div>
+        <div className="mt-2 space-y-0.5 pl-4.5 text-xs text-muted">
+          {limitText && (
             <p>
               Límite: <span className="text-foreground/80">{limitText}</span>
             </p>
-            <p>
-              Radio:{" "}
-              <span className="text-foreground/80">{radiusMeters} m</span>
-            </p>
-          </div>
+          )}
+          {note && <p>{note}</p>}
+          <p>
+            Radio:{" "}
+            <span className="text-foreground/80">{radiusMeters} m</span>
+          </p>
         </div>
-        {!readOnly && (
-          <button
-            type="button"
-            onClick={onEdit}
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted hover:bg-surface hover:text-foreground"
-            aria-label={`Editar ${title}`}
-          >
-            <Pencil className="h-3.5 w-3.5" aria-hidden />
-          </button>
-        )}
       </div>
+      {!readOnly && (
+        <Pencil className="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden />
+      )}
     </div>
+  );
+
+  if (readOnly) {
+    return (
+      <div className={`rounded-lg border p-3 ${toneClass}`}>{body}</div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onEdit}
+      className={`w-full rounded-lg border p-3 text-left ${toneClass}`}
+      aria-label={`Editar ${title}`}
+    >
+      {body}
+    </button>
   );
 }
 
@@ -241,8 +314,11 @@ export function InterventionMapPanel({
   const [coordinates, setCoordinates] = useState<[number, number] | null>(
     intervention.location?.point.coordinates ?? null,
   );
-  const [controlPoint, setControlPoint] = useState<[number, number] | null>(
-    intervention.manualOverrides?.controlPoint?.coordinates ?? null,
+  const [tacticalPoints, setTacticalPoints] = useState<TacticalPointCoordinates>(
+    tacticalPointsFromOverrides(intervention.manualOverrides),
+  );
+  const [alertReading, setAlertReading] = useState<[number, number] | null>(
+    intervention.manualOverrides?.alertReading?.coordinates ?? null,
   );
   const [radiusI, setRadiusI] = useState(
     intervention.zoneParams.radiusZoneIMeters,
@@ -250,16 +326,28 @@ export function InterventionMapPanel({
   const [radiusII, setRadiusII] = useState(
     intervention.zoneParams.radiusZoneIIMeters,
   );
+  const [zoningPhase, setZoningPhase] = useState<ZoningPhase>(
+    intervention.zoneParams.zoningPhase ?? "measured",
+  );
+  const [zoneIEstimated, setZoneIEstimated] = useState(
+    intervention.zoneParams.zoneIEstimated ?? false,
+  );
+  const [formulaVersion, setFormulaVersion] = useState(
+    intervention.zoneParams.formulaVersion,
+  );
   const [limitZoneI, setLimitZoneI] = useState<DoseLimitBound>(
     intervention.zoneParams.limitZoneI ?? DEFAULT_LIMIT_ZONE_I,
   );
   const [limitZoneII, setLimitZoneII] = useState<ZoneIILimit>(
     intervention.zoneParams.limitZoneII ?? DEFAULT_LIMIT_ZONE_II,
   );
-  const [notes, setNotes] = useState(
-    intervention.manualOverrides?.notes ?? "",
+  const [annotations, setAnnotations] = useState<AnnotationRecord[]>(() =>
+    loadAnnotations(intervention),
   );
-  const [notesOpen, setNotesOpen] = useState(Boolean(notes));
+  const [annotationDraft, setAnnotationDraft] = useState("");
+  const [notesOpen, setNotesOpen] = useState(
+    () => loadAnnotations(intervention).length > 0,
+  );
   const [placementMode, setPlacementMode] =
     useState<MapPlacementMode>("none");
   const [toast, setToast] = useState<string | null>(null);
@@ -276,13 +364,17 @@ export function InterventionMapPanel({
   const lastSavedPayloadRef = useRef(
     serializePersistPayload({
       coordinates: intervention.location?.point.coordinates ?? null,
-      controlPoint:
-        intervention.manualOverrides?.controlPoint?.coordinates ?? null,
+      tacticalPoints: tacticalPointsFromOverrides(intervention.manualOverrides),
+      alertReading:
+        intervention.manualOverrides?.alertReading?.coordinates ?? null,
       radiusI: intervention.zoneParams.radiusZoneIMeters,
       radiusII: intervention.zoneParams.radiusZoneIIMeters,
       limitZoneI: intervention.zoneParams.limitZoneI ?? DEFAULT_LIMIT_ZONE_I,
       limitZoneII: intervention.zoneParams.limitZoneII ?? DEFAULT_LIMIT_ZONE_II,
-      notes: intervention.manualOverrides?.notes ?? "",
+      annotations: loadAnnotations(intervention),
+      zoningPhase: intervention.zoneParams.zoningPhase ?? "measured",
+      zoneIEstimated: intervention.zoneParams.zoneIEstimated ?? false,
+      formulaVersion: intervention.zoneParams.formulaVersion,
     }),
   );
 
@@ -296,22 +388,30 @@ export function InterventionMapPanel({
   const getSnapshot = useCallback(
     (overrides: Partial<MapPersistSnapshot> = {}): MapPersistSnapshot => ({
       coordinates,
-      controlPoint,
+      tacticalPoints,
+      alertReading,
       radiusI,
       radiusII,
       limitZoneI,
       limitZoneII,
-      notes,
+      annotations,
+      zoningPhase,
+      zoneIEstimated,
+      formulaVersion,
       ...overrides,
     }),
     [
       coordinates,
-      controlPoint,
+      tacticalPoints,
+      alertReading,
       radiusI,
       radiusII,
       limitZoneI,
       limitZoneII,
-      notes,
+      annotations,
+      zoningPhase,
+      zoneIEstimated,
+      formulaVersion,
     ],
   );
 
@@ -330,7 +430,7 @@ export function InterventionMapPanel({
 
       if (!snapshot.coordinates) {
         setError(
-          "Selecciona un punto de medición para guardar la zonificación",
+          "Selecciona una fuente radiológica para guardar la zonificación",
         );
         return false;
       }
@@ -352,7 +452,7 @@ export function InterventionMapPanel({
       const result = await apiFetch(`/api/interventions/${intervention.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildPersistBody(intervention, snapshot)),
+        body: JSON.stringify(buildPersistBody(snapshot)),
       });
       savingRef.current = false;
 
@@ -399,25 +499,113 @@ export function InterventionMapPanel({
   const onSelectPoint = useCallback(
     (lngLat: [number, number]) => {
       if (effectiveReadOnly) return;
+
+      if (alertReading) {
+        const radii = radiiFromAlertReading(distanceMeters(lngLat, alertReading));
+        if (!radii) {
+          setError("La fuente queda demasiado cerca de la lectura de 100 µSv/h");
+          return;
+        }
+        setCoordinates(lngLat);
+        setRadiusI(radii.radiusZoneIMeters);
+        setRadiusII(radii.radiusZoneIIMeters);
+        setZoningPhase("measured");
+        setZoneIEstimated(true);
+        setFormulaVersion(INVERSE_SQUARE_FORMULA);
+        setPlacementMode("none");
+        setError(null);
+        setToast(
+          `Zona II a ${radii.radiusZoneIIMeters} m. Zona I estimada a ${radii.radiusZoneIMeters} m.`,
+        );
+        void persistMapState({
+          coordinates: lngLat,
+          radiusI: radii.radiusZoneIMeters,
+          radiusII: radii.radiusZoneIIMeters,
+          zoningPhase: "measured",
+          zoneIEstimated: true,
+          formulaVersion: INVERSE_SQUARE_FORMULA,
+        });
+        return;
+      }
+
+      const firstPlacement = coordinates === null;
+      const nextRadiusI = firstPlacement ? INITIAL_CORDON_INNER_METERS : radiusI;
+      const nextRadiusII = firstPlacement ? INITIAL_CORDON_OUTER_METERS : radiusII;
+      const nextPhase: ZoningPhase = firstPlacement ? "initial-cordon" : zoningPhase;
+
       setCoordinates(lngLat);
+      setRadiusI(nextRadiusI);
+      setRadiusII(nextRadiusII);
+      setZoningPhase(nextPhase);
+      if (firstPlacement) {
+        setZoneIEstimated(false);
+        setFormulaVersion("v1-placeholder");
+      }
       setPlacementMode("none");
       setToast(null);
       setError(null);
-      void persistMapState({ coordinates: lngLat });
+      void persistMapState({
+        coordinates: lngLat,
+        radiusI: nextRadiusI,
+        radiusII: nextRadiusII,
+        zoningPhase: nextPhase,
+        ...(firstPlacement
+          ? { zoneIEstimated: false, formulaVersion: "v1-placeholder" }
+          : {}),
+      });
     },
-    [effectiveReadOnly, persistMapState],
+    [alertReading, coordinates, effectiveReadOnly, persistMapState, radiusI, radiusII, zoningPhase],
   );
 
-  const onSelectControlPoint = useCallback(
+  const onSelectAlertReading = useCallback(
     (lngLat: [number, number]) => {
       if (effectiveReadOnly) return;
-      setControlPoint(lngLat);
+      if (!coordinates) {
+        setPlacementMode("none");
+        setError("Sitúa primero la fuente radiológica");
+        return;
+      }
+
+      const radii = radiiFromAlertReading(distanceMeters(coordinates, lngLat));
+      if (!radii) {
+        setError("La lectura está demasiado cerca de la fuente radiológica");
+        return;
+      }
+
+      setAlertReading(lngLat);
+      setRadiusI(radii.radiusZoneIMeters);
+      setRadiusII(radii.radiusZoneIIMeters);
+      setZoningPhase("measured");
+      setZoneIEstimated(true);
+      setFormulaVersion(INVERSE_SQUARE_FORMULA);
+      setPlacementMode("none");
+      setError(null);
+      setToast(
+        `Zona II a ${radii.radiusZoneIIMeters} m. Zona I estimada a ${radii.radiusZoneIMeters} m.`,
+      );
+      void persistMapState({
+        alertReading: lngLat,
+        radiusI: radii.radiusZoneIMeters,
+        radiusII: radii.radiusZoneIIMeters,
+        zoningPhase: "measured",
+        zoneIEstimated: true,
+        formulaVersion: INVERSE_SQUARE_FORMULA,
+      });
+    },
+    [coordinates, effectiveReadOnly, persistMapState],
+  );
+
+  const onSelectTacticalPoint = useCallback(
+    (kind: TacticalPointKind, lngLat: [number, number]) => {
+      if (effectiveReadOnly) return;
+      const nextPoints = { ...tacticalPoints, [kind]: lngLat };
+      setTacticalPoints(nextPoints);
       setPlacementMode("none");
       setToast(null);
       setError(null);
-      void persistMapState({ controlPoint: lngLat });
+      void persistMapState({ tacticalPoints: nextPoints });
     },
-    [effectiveReadOnly, persistMapState],
+    [effectiveReadOnly, persistMapState, tacticalPoints],
   );
 
   function startEdit(zone: "I" | "II") {
@@ -443,11 +631,15 @@ export function InterventionMapPanel({
       }
       setRadiusI(draftRadius);
       setLimitZoneI(draftLimitI);
+      setZoneIEstimated(false);
+      setFormulaVersion("v1-placeholder");
       setError(null);
       setEditingZone(null);
       void persistMapState({
         radiusI: draftRadius,
         limitZoneI: draftLimitI,
+        zoneIEstimated: false,
+        formulaVersion: "v1-placeholder",
       });
     } else if (editingZone === "II") {
       if (!(draftRadius > 0)) {
@@ -460,28 +652,65 @@ export function InterventionMapPanel({
       }
       setRadiusII(draftRadius);
       setLimitZoneII(draftLimitII);
+      setZoneIEstimated(false);
+      setFormulaVersion("v1-placeholder");
       setError(null);
       setEditingZone(null);
       void persistMapState({
         radiusII: draftRadius,
         limitZoneII: draftLimitII,
+        zoneIEstimated: false,
+        formulaVersion: "v1-placeholder",
       });
     }
   }
 
   function activateMeasurementPlacement() {
     setPlacementMode("measurement");
-    setToast("Pulsa en el mapa donde quieras situar el punto de medición");
+    setToast("Pulsa en el mapa donde quieras situar la fuente radiológica");
     setError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function activateControlPlacement() {
-    setPlacementMode("control");
-    setToast("Pulsa en el mapa donde quieras situar el punto de control");
+  function activateAlertReadingPlacement() {
+    if (!coordinates) {
+      setError("Sitúa primero la fuente radiológica");
+      return;
+    }
+    setPlacementMode("alert-reading");
+    setToast("Pulsa en el mapa donde el radiámetro marque 100 µSv/h");
     setError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+
+  function activateTacticalPlacement(kind: TacticalPointKind) {
+    setPlacementMode(kind);
+    setToast(TACTICAL_POINT_PLACE_HINTS[kind]);
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function addAnnotation() {
+    const text = annotationDraft.trim();
+    if (!text) return;
+    const next = [
+      ...annotations,
+      { text, createdAt: new Date().toISOString() },
+    ];
+    setAnnotations(next);
+    setAnnotationDraft("");
+    setNotesOpen(true);
+    setError(null);
+    void persistMapState({ annotations: next });
+  }
+
+  function removeAnnotation(index: number) {
+    const next = annotations.filter((_, itemIndex) => itemIndex !== index);
+    setAnnotations(next);
+    void persistMapState({ annotations: next });
+  }
+
+  const belt = beltCopy(zoningPhase, zoneIEstimated);
 
   return (
     <div className="space-y-4">
@@ -489,12 +718,14 @@ export function InterventionMapPanel({
       <div className="relative">
         <InterventionMap
           coordinates={coordinates}
-          controlPoint={controlPoint}
+          tacticalPoints={tacticalPoints}
+          alertReading={alertReading}
           radiusZoneIMeters={radiusI}
           radiusZoneIIMeters={radiusII}
           placementMode={effectiveReadOnly ? "none" : placementMode}
           onSelectPoint={onSelectPoint}
-          onSelectControlPoint={onSelectControlPoint}
+          onSelectTacticalPoint={onSelectTacticalPoint}
+          onSelectAlertReading={onSelectAlertReading}
         />
         {toast && (
           <div
@@ -517,18 +748,31 @@ export function InterventionMapPanel({
         </div>
 
         <div className="space-y-2">
+          {zoningPhase === "initial-cordon" && (
+            <p className="text-xs text-muted">
+              Cinturón de espera hasta medir 100 µSv/h.
+            </p>
+          )}
           <ZoneSummaryCard
-            title="Zona I - Medidas Urgentes"
-            colorClass="bg-red-500"
-            limitText={formatZoneILimit(limitZoneI)}
+            title={belt.innerTitle}
+            tone="red"
+            limitText={
+              zoningPhase === "initial-cordon" ? null : formatZoneILimit(limitZoneI)
+            }
+            note={belt.innerNote}
             radiusMeters={radiusI}
             onEdit={() => startEdit("I")}
             readOnly={effectiveReadOnly}
           />
           <ZoneSummaryCard
-            title="Zona II - Alerta"
-            colorClass="bg-orange-500"
-            limitText={formatZoneIILimit(limitZoneII)}
+            title={belt.outerTitle}
+            tone="orange"
+            limitText={
+              zoningPhase === "initial-cordon"
+                ? null
+                : formatZoneIILimit(limitZoneII)
+            }
+            note={belt.outerNote}
             radiusMeters={radiusII}
             onEdit={() => startEdit("II")}
             readOnly={effectiveReadOnly}
@@ -537,58 +781,132 @@ export function InterventionMapPanel({
 
         {!effectiveReadOnly && (
           <div className="flex flex-col gap-2">
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={activateMeasurementPlacement}
-                className={
-                  placementMode === "measurement"
-                    ? "flex-1 ring-2 ring-ring"
-                    : "flex-1"
-                }
-              >
-                <Radiation className="min-h-4 min-w-4" />
-                Punto de medición
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={activateControlPlacement}
-                className={
-                  placementMode === "control"
-                    ? "flex-1 ring-2 ring-ring"
-                    : "flex-1"
-                }
-              >
-                <Flag className="min-h-4 min-w-4" />
-                Punto de control
-              </Button>
-            </div>
             <Button
               type="button"
               variant="secondary"
-              className="w-full"
-              onClick={() => setNotesOpen((open) => !open)}
-              aria-expanded={notesOpen}
-              aria-controls={notesId}
+              onClick={activateMeasurementPlacement}
+              className={
+                placementMode === "measurement"
+                  ? "w-full !border-2 !border-black !bg-yellow-400 !text-black ring-2 ring-black hover:!bg-yellow-300"
+                  : "w-full !border-2 !border-black !bg-yellow-400 !text-black hover:!bg-yellow-300"
+              }
             >
-              <FilePen className="min-h-4 min-w-4" />
-              Anotaciones
+              <Radiation className="min-h-4 min-w-4 fill-black stroke-black" />
+              Fuente radiológica
             </Button>
-            {notesOpen && (
-              <textarea
-                id={notesId}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                onBlur={() => void persistMapState()}
-                placeholder="Anotaciones adicionales…"
-                rows={4}
-                className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none ring-ring focus:ring-2"
-              />
-            )}
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={activateAlertReadingPlacement}
+              className={
+                placementMode === "alert-reading"
+                  ? "w-full !border-2 !border-blue-800 !bg-blue-600 !text-white ring-2 ring-blue-300 hover:!bg-blue-500"
+                  : "w-full !border-2 !border-blue-800 !bg-blue-600 !text-white hover:!bg-blue-500"
+              }
+            >
+              <Gauge className="min-h-4 min-w-4" />
+              Lectura 100 µSv/h
+            </Button>
+            <div className="grid grid-cols-2 gap-2">
+              {TACTICAL_POINT_KINDS.map((kind) => (
+                <Button
+                  key={kind}
+                  type="button"
+                  variant="secondary"
+                  onClick={() => activateTacticalPlacement(kind)}
+                  className={
+                    placementMode === kind
+                      ? `h-auto min-h-10 flex-col gap-1 px-2 py-2 text-center text-xs leading-tight ring-2 ring-ring sm:text-sm ${kind === "entryExit" ? "" : "!border-2"} ${TACTICAL_POINT_BORDER[kind]}`
+                      : `h-auto min-h-10 flex-col gap-1 px-2 py-2 text-center text-xs leading-tight sm:text-sm ${kind === "entryExit" ? "" : "!border-2"} ${TACTICAL_POINT_BORDER[kind]}`
+                  }
+                >
+                  <Icon
+                    iconNode={TACTICAL_POINT_ICON_NODES[kind]}
+                    className="min-h-4 min-w-4"
+                  />
+                  {TACTICAL_POINT_LABELS[kind]}
+                </Button>
+              ))}
+            </div>
           </div>
         )}
+
+        <div className="space-y-2">
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full !border-2 !border-white"
+            onClick={() => setNotesOpen((open) => !open)}
+            aria-expanded={notesOpen}
+            aria-controls={notesId}
+            disabled={effectiveReadOnly && annotations.length === 0}
+          >
+            <FilePen className="min-h-4 min-w-4" />
+            Anotaciones
+            {annotations.length > 0 ? ` (${annotations.length})` : ""}
+          </Button>
+          {notesOpen && (
+            <div id={notesId} className="space-y-2">
+              {annotations.length === 0 ? (
+                <p className="text-xs text-muted">Sin anotaciones.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {annotations.map((annotation, index) => {
+                    const time = formatAnnotationTime(annotation.createdAt);
+                    return (
+                      <li
+                        key={`${annotation.createdAt}-${index}`}
+                        className="flex items-start gap-2 rounded-md bg-surface px-2 py-1.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          {time && (
+                            <p className="font-mono text-[11px] text-muted">
+                              {time}
+                            </p>
+                          )}
+                          <p className="text-sm text-foreground">
+                            {annotation.text}
+                          </p>
+                        </div>
+                        {!effectiveReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => removeAnnotation(index)}
+                            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-card hover:text-foreground"
+                            aria-label={`Quitar anotación: ${annotation.text}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {!effectiveReadOnly && (
+                <form
+                  className="space-y-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    addAnnotation();
+                  }}
+                >
+                  <textarea
+                    value={annotationDraft}
+                    onChange={(event) => setAnnotationDraft(event.target.value)}
+                    placeholder="Qué ha pasado…"
+                    rows={2}
+                    maxLength={500}
+                    className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none ring-ring focus:ring-2"
+                  />
+                  <Button type="submit" variant="secondary" className="w-full">
+                    Añadir anotación
+                  </Button>
+                </form>
+              )}
+            </div>
+          )}
+        </div>
 
         {error && (
           <p className="flex items-start gap-2 rounded-md bg-danger px-3 py-2 text-sm text-danger-foreground">

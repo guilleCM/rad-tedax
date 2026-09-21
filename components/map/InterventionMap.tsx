@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { Layers, Search } from "lucide-react";
 import {
   Map,
@@ -15,8 +16,9 @@ import {
 } from "@/lib/geocoding/nominatim-client";
 import {
   computeOverlay,
-  createControlPointMarkerElement,
+  createAlertReadingMarkerElement,
   createDangerPointMarkerElement,
+  createTacticalPointMarkerElement,
   easeToPoint,
   fitToZonesOrPoint,
   lock2DView,
@@ -24,20 +26,36 @@ import {
   type BasemapId,
   type ZoneOverlay,
 } from "@/lib/map/interventionMapShared";
+import {
+  emptyTacticalPointCoordinates,
+  isTacticalPointKind,
+  lngLatsFromTacticalPoints,
+  type TacticalPointCoordinates,
+} from "@/lib/map/tacticalPoints";
 import { parseLatLng } from "@/lib/map/parseMapQuery";
+import { TACTICAL_POINT_KINDS, type TacticalPointKind } from "@/lib/types";
 
 type SearchMode = "address" | "coordinates";
 
-export type MapPlacementMode = "none" | "measurement" | "control";
+export type MapPlacementMode =
+  | "none"
+  | "measurement"
+  | "alert-reading"
+  | TacticalPointKind;
 
 type Props = {
   coordinates: [number, number] | null;
-  controlPoint?: [number, number] | null;
+  tacticalPoints?: TacticalPointCoordinates;
+  alertReading?: [number, number] | null;
   radiusZoneIMeters: number;
   radiusZoneIIMeters: number;
   placementMode?: MapPlacementMode;
   onSelectPoint: (lngLat: [number, number]) => void;
-  onSelectControlPoint?: (lngLat: [number, number]) => void;
+  onSelectTacticalPoint?: (
+    kind: TacticalPointKind,
+    lngLat: [number, number],
+  ) => void;
+  onSelectAlertReading?: (lngLat: [number, number]) => void;
 };
 
 function flyToNominatimHit(map: Map, hit: NominatimSearchHit) {
@@ -79,30 +97,38 @@ function isAbortError(error: unknown) {
 
 export function InterventionMap({
   coordinates,
-  controlPoint = null,
+  tacticalPoints = emptyTacticalPointCoordinates(),
+  alertReading = null,
   radiusZoneIMeters,
   radiusZoneIIMeters,
   placementMode = "none",
   onSelectPoint,
-  onSelectControlPoint,
+  onSelectTacticalPoint,
+  onSelectAlertReading,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
   const markerRef = useRef<Marker | null>(null);
-  const controlMarkerRef = useRef<Marker | null>(null);
+  const tacticalMarkersRef = useRef<Partial<Record<TacticalPointKind, Marker>>>(
+    {},
+  );
+  const alertMarkerRef = useRef<Marker | null>(null);
   const styleReadyRef = useRef(false);
   const coordinatesRef = useRef(coordinates);
-  const controlPointRef = useRef(controlPoint);
+  const tacticalPointsRef = useRef(tacticalPoints);
+  const alertReadingRef = useRef(alertReading);
   const radiusIRef = useRef(radiusZoneIMeters);
   const radiusIIRef = useRef(radiusZoneIIMeters);
   const onSelectRef = useRef(onSelectPoint);
-  const onSelectControlRef = useRef(onSelectControlPoint);
+  const onSelectTacticalRef = useRef(onSelectTacticalPoint);
+  const onSelectAlertRef = useRef(onSelectAlertReading);
   const placementModeRef = useRef(placementMode);
   const hadCoordinatesRef = useRef(Boolean(coordinates));
   const updateOverlayRef = useRef<() => void>(() => {});
   const [mapError, setMapError] = useState<string | null>(null);
   const [basemap, setBasemap] = useState<BasemapId>("streets");
   const [overlay, setOverlay] = useState<ZoneOverlay | null>(null);
+  const [overlayHost, setOverlayHost] = useState<HTMLDivElement | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchMode, setSearchMode] = useState<SearchMode>("address");
   const [searchQuery, setSearchQuery] = useState("");
@@ -124,8 +150,12 @@ export function InterventionMap({
   }, [coordinates]);
 
   useEffect(() => {
-    controlPointRef.current = controlPoint;
-  }, [controlPoint]);
+    tacticalPointsRef.current = tacticalPoints;
+  }, [tacticalPoints]);
+
+  useEffect(() => {
+    alertReadingRef.current = alertReading;
+  }, [alertReading]);
 
   useEffect(() => {
     radiusIRef.current = radiusZoneIMeters;
@@ -140,8 +170,12 @@ export function InterventionMap({
   }, [onSelectPoint]);
 
   useEffect(() => {
-    onSelectControlRef.current = onSelectControlPoint;
-  }, [onSelectControlPoint]);
+    onSelectTacticalRef.current = onSelectTacticalPoint;
+  }, [onSelectTacticalPoint]);
+
+  useEffect(() => {
+    onSelectAlertRef.current = onSelectAlertReading;
+  }, [onSelectAlertReading]);
 
   useEffect(() => {
     placementModeRef.current = placementMode;
@@ -205,8 +239,10 @@ export function InterventionMap({
       const lngLat: [number, number] = [e.lngLat.lng, e.lngLat.lat];
       if (mode === "measurement") {
         onSelectRef.current(lngLat);
-      } else if (mode === "control") {
-        onSelectControlRef.current?.(lngLat);
+      } else if (mode === "alert-reading") {
+        onSelectAlertRef.current?.(lngLat);
+      } else if (isTacticalPointKind(mode)) {
+        onSelectTacticalRef.current?.(mode, lngLat);
       }
     });
 
@@ -222,7 +258,10 @@ export function InterventionMap({
           map,
           coordinatesRef.current,
           radiusIIRef.current,
-          controlPointRef.current,
+          [
+            ...lngLatsFromTacticalPoints(tacticalPointsRef.current),
+            ...(alertReadingRef.current ? [alertReadingRef.current] : []),
+          ],
         );
       }
     };
@@ -263,6 +302,7 @@ export function InterventionMap({
     }, 150);
 
     mapRef.current = map;
+    setOverlayHost(container);
 
     return () => {
       window.clearTimeout(resizeTimer);
@@ -271,10 +311,15 @@ export function InterventionMap({
       updateOverlayRef.current = () => {};
       markerRef.current?.remove();
       markerRef.current = null;
-      controlMarkerRef.current?.remove();
-      controlMarkerRef.current = null;
+      for (const marker of Object.values(tacticalMarkersRef.current)) {
+        marker?.remove();
+      }
+      tacticalMarkersRef.current = {};
+      alertMarkerRef.current?.remove();
+      alertMarkerRef.current = null;
       map.remove();
       mapRef.current = null;
+      setOverlayHost(null);
     };
     // intentionally mount once
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -311,35 +356,66 @@ export function InterventionMap({
         map,
         coordinates,
         radiusIIRef.current,
-        controlPointRef.current,
+        [
+          ...lngLatsFromTacticalPoints(tacticalPointsRef.current),
+          ...(alertReadingRef.current ? [alertReadingRef.current] : []),
+        ],
       );
     }
 
     updateOverlayRef.current();
   }, [coordinates]);
 
-  // Control point marker
+  // Tactical point markers
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    if (!controlPoint) {
-      controlMarkerRef.current?.remove();
-      controlMarkerRef.current = null;
+    for (const kind of TACTICAL_POINT_KINDS) {
+      const point = tacticalPoints[kind];
+      let marker = tacticalMarkersRef.current[kind];
+
+      if (!point) {
+        marker?.remove();
+        delete tacticalMarkersRef.current[kind];
+        continue;
+      }
+
+      if (!marker) {
+        marker = new Marker({
+          element: createTacticalPointMarkerElement(kind),
+          anchor: "bottom",
+        })
+          .setLngLat(point)
+          .addTo(map);
+        tacticalMarkersRef.current[kind] = marker;
+      } else {
+        marker.setLngLat(point);
+      }
+    }
+  }, [tacticalPoints]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (!alertReading) {
+      alertMarkerRef.current?.remove();
+      alertMarkerRef.current = null;
       return;
     }
 
-    if (!controlMarkerRef.current) {
-      controlMarkerRef.current = new Marker({
-        element: createControlPointMarkerElement(),
-        anchor: "bottom",
+    if (!alertMarkerRef.current) {
+      alertMarkerRef.current = new Marker({
+        element: createAlertReadingMarkerElement(),
+        anchor: "center",
       })
-        .setLngLat(controlPoint)
+        .setLngLat(alertReading)
         .addTo(map);
     } else {
-      controlMarkerRef.current.setLngLat(controlPoint);
+      alertMarkerRef.current.setLngLat(alertReading);
     }
-  }, [controlPoint]);
+  }, [alertReading]);
 
   // Refresh SVG when radii change from the panel
   useEffect(() => {
@@ -444,35 +520,39 @@ export function InterventionMap({
     <div className="relative">
       <div className="relative h-[min(70vh,560px)] w-full overflow-hidden rounded-lg border border-border bg-surface">
         <div ref={containerRef} className="absolute inset-0 h-full w-full" />
-        {overlay && (overlay.rI > 0 || overlay.rII > 0) && (
-          <svg
-            className="pointer-events-none absolute inset-0 z-1 h-full w-full"
-            aria-hidden
-          >
-            {overlay.rII > 0 && (
-              <circle
-                cx={overlay.cx}
-                cy={overlay.cy}
-                r={overlay.rII}
-                fill="#f97316"
-                fillOpacity={0.28}
-                stroke="#ea580c"
-                strokeWidth={2.5}
-              />
-            )}
-            {overlay.rI > 0 && (
-              <circle
-                cx={overlay.cx}
-                cy={overlay.cy}
-                r={overlay.rI}
-                fill="#dc2626"
-                fillOpacity={0.4}
-                stroke="#b91c1c"
-                strokeWidth={2.5}
-              />
-            )}
-          </svg>
-        )}
+        {overlayHost &&
+          overlay &&
+          (overlay.rI > 0 || overlay.rII > 0) &&
+          createPortal(
+            <svg
+              className="pointer-events-none absolute inset-0 z-[1] h-full w-full"
+              aria-hidden
+            >
+              {overlay.rII > 0 && (
+                <circle
+                  cx={overlay.cx}
+                  cy={overlay.cy}
+                  r={overlay.rII}
+                  fill="#f97316"
+                  fillOpacity={0.28}
+                  stroke="#ea580c"
+                  strokeWidth={2.5}
+                />
+              )}
+              {overlay.rI > 0 && (
+                <circle
+                  cx={overlay.cx}
+                  cy={overlay.cy}
+                  r={overlay.rI}
+                  fill="#dc2626"
+                  fillOpacity={0.4}
+                  stroke="#b91c1c"
+                  strokeWidth={2.5}
+                />
+              )}
+            </svg>,
+            overlayHost,
+          )}
         <div className="pointer-events-none absolute left-3 top-3 z-10 flex max-w-[min(100%-1.5rem,22rem)] flex-col items-start gap-2">
           <div className="flex items-start gap-2">
             <div

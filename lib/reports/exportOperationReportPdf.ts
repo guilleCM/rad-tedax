@@ -9,6 +9,8 @@ import {
   formatZoneILimit,
   formatZoneIILimit,
 } from "@/lib/zones/formatDoseLimit";
+import { beltCopy } from "@/domain/zones/inverseSquare";
+import { formatAnnotationTime } from "@/domain/dosimetry/annotations";
 import type { ActiveZone } from "@/lib/types";
 import {
   MAP_SNAPSHOT_HEIGHT,
@@ -176,12 +178,18 @@ export async function exportOperationReportPdf(
     }`,
   );
 
-  writeSectionTitle(writer, "Resumen");
-  writeLine(
-    writer,
-    report.summaryNotes ??
-      "Operación documentada sin incidencias registradas.",
-  );
+  writeSectionTitle(writer, "Anotaciones");
+  if (report.annotations.length === 0) {
+    writeLine(writer, "Operación documentada sin incidencias registradas.");
+  } else {
+    for (const annotation of report.annotations) {
+      const time = formatAnnotationTime(annotation.createdAt);
+      writeLine(
+        writer,
+        time ? `${time} ${annotation.text}` : annotation.text,
+      );
+    }
+  }
 
   writeSectionTitle(writer, "Ubicación");
   if (report.location) {
@@ -194,11 +202,13 @@ export async function exportOperationReportPdf(
         `Coordenadas: ${report.location.coordinates[1].toFixed(6)}, ${report.location.coordinates[0].toFixed(6)}`,
       );
     }
-    if (report.controlPoint) {
-      writeLine(
-        writer,
-        `Punto de control: ${report.controlPoint[1].toFixed(6)}, ${report.controlPoint[0].toFixed(6)}`,
-      );
+    if (report.tacticalPoints.length > 0) {
+      for (const point of report.tacticalPoints) {
+        writeLine(
+          writer,
+          `${point.label}: ${point.coordinates[1].toFixed(6)}, ${point.coordinates[0].toFixed(6)}`,
+        );
+      }
     }
   } else {
     writeLine(writer, "Sin ubicación registrada.");
@@ -209,13 +219,29 @@ export async function exportOperationReportPdf(
   }
 
   writeSectionTitle(writer, "Cinturones establecidos");
+  const belts = beltCopy(
+    report.zoneParams.zoningPhase ?? "measured",
+    report.zoneParams.zoneIEstimated ?? false,
+  );
+  const innerDetails = [
+    report.zoneParams.zoningPhase === "initial-cordon"
+      ? null
+      : formatZoneILimit(report.zoneParams.limitZoneI),
+    belts.innerNote,
+  ].filter(Boolean);
+  const outerDetails = [
+    report.zoneParams.zoningPhase === "initial-cordon"
+      ? null
+      : formatZoneIILimit(report.zoneParams.limitZoneII),
+    belts.outerNote,
+  ].filter(Boolean);
   writeLine(
     writer,
-    `Zona I — Medidas Urgentes: ${report.zoneParams.radiusZoneIMeters} m (${formatZoneILimit(report.zoneParams.limitZoneI)})`,
+    `${belts.innerTitle}: ${report.zoneParams.radiusZoneIMeters} m (${innerDetails.join("; ")})`,
   );
   writeLine(
     writer,
-    `Zona II — Alerta: ${report.zoneParams.radiusZoneIIMeters} m (${formatZoneIILimit(report.zoneParams.limitZoneII)})`,
+    `${belts.outerTitle}: ${report.zoneParams.radiusZoneIIMeters} m (${outerDetails.join("; ")})`,
   );
 
   writeSectionTitle(writer, "Mediciones clave");

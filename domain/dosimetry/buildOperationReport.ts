@@ -10,13 +10,17 @@ import {
   dosePercentOfLimit,
 } from "@/lib/dosimetry/formatOperationDose";
 import { doseRiskLevel } from "@/lib/dosimetry/riskLevel";
-import type {
-  AccumulatedDoseUnit,
-  InterventionStatus,
-  OperationDosimetry,
-  OperationTeam,
-  ZoneParams,
+import {
+  TACTICAL_POINT_KINDS,
+  type AccumulatedDoseUnit,
+  type InterventionStatus,
+  type OperationDosimetry,
+  type OperationTeam,
+  type TacticalPointKind,
+  type ZoneParams,
 } from "@/lib/types";
+import { TACTICAL_POINT_LABELS } from "@/lib/map/tacticalPoints";
+import { resolveAnnotations } from "@/domain/dosimetry/annotations";
 
 const OPERATION_TEAM_LABELS: Record<OperationTeam, string> = {
   search: "Equipo de búsqueda",
@@ -57,6 +61,12 @@ export type OperationReportParticipant = {
   riskLevel: ReturnType<typeof doseRiskLevel>;
 };
 
+export type OperationReportTacticalPoint = {
+  kind: TacticalPointKind;
+  label: string;
+  coordinates: [number, number];
+};
+
 export type OperationReportSnapshot = {
   generatedAt: string;
   operation: {
@@ -66,11 +76,15 @@ export type OperationReportSnapshot = {
     durationSeconds: number | null;
   };
   summaryNotes: string | null;
+  annotations: Array<{
+    text: string;
+    createdAt: string | null;
+  }>;
   location: {
     label: string | null;
     coordinates: [number, number] | null;
   } | null;
-  controlPoint: [number, number] | null;
+  tacticalPoints: OperationReportTacticalPoint[];
   zoneParams: ZoneParams;
   dosimetry: {
     maxOperationDose: OperationDosimetry["maxOperationDose"];
@@ -94,7 +108,23 @@ export type BuildOperationReportInput = {
   zoneParams: ZoneParams;
   manualOverrides: {
     notes?: string;
+    annotations?: Array<{
+      text: string;
+      createdAt: string | Date;
+    }>;
     controlPoint?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+    decontaminationStation?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+    advancedCommandPost?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+    entryExit?: {
       type: "Point";
       coordinates: [number, number];
     };
@@ -213,7 +243,8 @@ export function buildOperationReport(
     sessions: participant.sessions,
   }));
 
-  const notes = input.manualOverrides?.notes?.trim();
+  const annotations = resolveAnnotations(input.manualOverrides);
+  const notes = annotations.map((annotation) => annotation.text).join("\n");
 
   return {
     generatedAt: now.toISOString(),
@@ -224,14 +255,19 @@ export function buildOperationReport(
       durationSeconds: computeDurationSeconds(input, now),
     },
     summaryNotes: notes || null,
+    annotations,
     location: input.location
       ? {
           label: input.location.label,
           coordinates: input.location.point.coordinates,
         }
       : null,
-    controlPoint:
-      input.manualOverrides?.controlPoint?.coordinates ?? null,
+    tacticalPoints: TACTICAL_POINT_KINDS.flatMap((kind) => {
+      const coordinates = input.manualOverrides?.[kind]?.coordinates;
+      return coordinates
+        ? [{ kind, label: TACTICAL_POINT_LABELS[kind], coordinates }]
+        : [];
+    }),
     zoneParams: input.zoneParams,
     dosimetry: {
       maxOperationDose,

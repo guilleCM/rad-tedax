@@ -1,5 +1,10 @@
 import type { ObjectId } from "mongodb";
 import type { Feature, Point, Polygon } from "geojson";
+import {
+  INITIAL_CORDON_INNER_METERS,
+  INITIAL_CORDON_OUTER_METERS,
+  type ZoningPhase,
+} from "@/domain/zones/inverseSquare";
 
 export type UserRole = "manager" | "leader" | "participant";
 
@@ -32,12 +37,18 @@ export interface ZoneIILimit {
   upper: DoseLimitBound;
 }
 
+export type { ZoningPhase };
+
 export interface ZoneParams {
   formulaVersion: string;
   radiusZoneIMeters: number;
   radiusZoneIIMeters: number;
   limitZoneI: DoseLimitBound;
   limitZoneII: ZoneIILimit;
+  /** Ausente en documentos anteriores al cinturón inicial. */
+  zoningPhase?: ZoningPhase;
+  /** La Zona I sale de la lectura de 100 µSv/h, no de una medida directa. */
+  zoneIEstimated?: boolean;
 }
 
 export type ZoneFeature = Feature<
@@ -59,14 +70,34 @@ export interface InterventionZones {
   };
 }
 
+export type GeoJsonLngLatPoint = {
+  type: "Point";
+  coordinates: [number, number];
+};
+
+export const TACTICAL_POINT_KINDS = [
+  "controlPoint",
+  "decontaminationStation",
+  "advancedCommandPost",
+  "entryExit",
+] as const;
+
+export type TacticalPointKind = (typeof TACTICAL_POINT_KINDS)[number];
+
 export interface ManualOverrides {
   zoneI?: ZoneFeature;
   zoneII?: ZoneFeature;
   notes?: string;
-  controlPoint?: {
-    type: "Point";
-    coordinates: [number, number];
-  };
+  annotations?: {
+    text: string;
+    createdAt: Date;
+  }[];
+  controlPoint?: GeoJsonLngLatPoint;
+  decontaminationStation?: GeoJsonLngLatPoint;
+  advancedCommandPost?: GeoJsonLngLatPoint;
+  entryExit?: GeoJsonLngLatPoint;
+  /** Punto donde el radiámetro lee 100 µSv/h. */
+  alertReading?: GeoJsonLngLatPoint;
 }
 
 export type AccumulatedDoseUnit = "mSv" | "uSv";
@@ -139,10 +170,12 @@ export const DEFAULT_LIMIT_ZONE_II: ZoneIILimit = {
 
 export const DEFAULT_ZONE_PARAMS: ZoneParams = {
   formulaVersion: "v1-placeholder",
-  radiusZoneIMeters: 100,
-  radiusZoneIIMeters: 300,
+  radiusZoneIMeters: INITIAL_CORDON_INNER_METERS,
+  radiusZoneIIMeters: INITIAL_CORDON_OUTER_METERS,
   limitZoneI: DEFAULT_LIMIT_ZONE_I,
   limitZoneII: DEFAULT_LIMIT_ZONE_II,
+  zoningPhase: "initial-cordon",
+  zoneIEstimated: false,
 };
 
 export const DEFAULT_OPERATION_DOSIMETRY: OperationDosimetry = {

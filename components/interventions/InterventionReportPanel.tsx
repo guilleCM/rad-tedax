@@ -9,6 +9,7 @@ import {
 } from "@/components/map/InterventionMapSnapshot";
 import { buildOperationReport } from "@/domain/dosimetry/buildOperationReport";
 import { exportOperationReportPdf } from "@/lib/reports/exportOperationReportPdf";
+import { tacticalPointsFromOverrides } from "@/lib/map/tacticalPoints";
 import type {
   DoseLimitBound,
   InterventionStatus,
@@ -36,6 +37,22 @@ type SerializedIntervention = {
   manualOverrides: {
     notes?: string;
     controlPoint?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+    decontaminationStation?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+    advancedCommandPost?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+    entryExit?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+    alertReading?: {
       type: "Point";
       coordinates: [number, number];
     };
@@ -87,8 +104,11 @@ export function InterventionReportPanel({
         <InterventionMapSnapshot
           ref={mapSnapshotRef}
           coordinates={mapCoordinates}
-          controlPoint={
-            intervention.manualOverrides?.controlPoint?.coordinates ?? null
+          tacticalPoints={tacticalPointsFromOverrides(
+            intervention.manualOverrides,
+          )}
+          alertReading={
+            intervention.manualOverrides?.alertReading?.coordinates ?? null
           }
           radiusZoneIMeters={intervention.zoneParams.radiusZoneIMeters}
           radiusZoneIIMeters={intervention.zoneParams.radiusZoneIIMeters}

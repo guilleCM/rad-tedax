@@ -36,6 +36,8 @@ import {
   formatZoneILimit,
   formatZoneIILimit,
 } from "@/lib/zones/formatDoseLimit";
+import { beltCopy } from "@/domain/zones/inverseSquare";
+import { formatAnnotationTime } from "@/domain/dosimetry/annotations";
 import type {
   DoseLimitBound,
   InterventionStatus,
@@ -60,10 +62,24 @@ type SerializedIntervention = {
     radiusZoneIIMeters: number;
     limitZoneI?: DoseLimitBound;
     limitZoneII?: ZoneIILimit;
+    zoningPhase?: "initial-cordon" | "measured";
+    zoneIEstimated?: boolean;
   } & ZoneParams;
   manualOverrides: {
     notes?: string;
     controlPoint?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+    decontaminationStation?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+    advancedCommandPost?: {
+      type: "Point";
+      coordinates: [number, number];
+    };
+    entryExit?: {
       type: "Point";
       coordinates: [number, number];
     };
@@ -148,6 +164,10 @@ export function InterventionReportView({
 
   const limitZoneI = intervention.zoneParams.limitZoneI;
   const limitZoneII = intervention.zoneParams.limitZoneII;
+  const belts = beltCopy(
+    intervention.zoneParams.zoningPhase ?? "measured",
+    intervention.zoneParams.zoneIEstimated ?? false,
+  );
   const coords = report.location?.coordinates;
 
   async function handleExportPdf() {
@@ -212,19 +232,46 @@ export function InterventionReportView({
       <section className="rounded-lg border border-border bg-card p-4">
         <div className="flex items-start gap-3">
           <ShieldCheck
-            className="mt-0.5 h-5 w-5 shrink-0 text-success-foreground"
+            className={`mt-0.5 h-5 w-5 shrink-0 ${
+              report.annotations.length === 0
+                ? "text-success-foreground"
+                : "text-foreground"
+            }`}
             aria-hidden
           />
-          <div>
+          <div className="min-w-0 flex-1">
             <h3 className="text-sm font-semibold text-foreground">
-              Resumen de operación
+              Anotaciones
             </h3>
-            <p className="mt-2 text-sm text-muted">
-              {report.summaryNotes || defaultSummary(intervention.status)}
-            </p>
-            <p className="mt-2 inline-flex rounded-full bg-success px-2 py-0.5 text-xs font-medium text-success-foreground">
-              Sin incidencias
-            </p>
+            {report.annotations.length === 0 ? (
+              <>
+                <p className="mt-2 text-sm text-muted">
+                  {defaultSummary(intervention.status)}
+                </p>
+                <p className="mt-2 inline-flex rounded-full bg-success px-2 py-0.5 text-xs font-medium text-success-foreground">
+                  Sin incidencias
+                </p>
+              </>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {report.annotations.map((annotation) => {
+                  const time = formatAnnotationTime(annotation.createdAt);
+                  return (
+                    <li
+                      key={`${annotation.createdAt ?? "sin-hora"}-${annotation.text}`}
+                      className="text-sm text-foreground"
+                    >
+                      {time && (
+                        <span className="mr-2 font-mono text-xs text-muted">
+                          {time}
+                        </span>
+                      )}
+                      {annotation.text}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         </div>
       </section>
@@ -244,15 +291,15 @@ export function InterventionReportView({
                 {coords[1].toFixed(6)}, {coords[0].toFixed(6)}
               </p>
             )}
-            {report.controlPoint && (
-              <p className="text-sm text-muted">
-                Punto de control:{" "}
+            {report.tacticalPoints.map((point) => (
+              <p key={point.kind} className="text-sm text-muted">
+                {point.label}:{" "}
                 <span className="font-mono text-xs text-foreground">
-                  {report.controlPoint[1].toFixed(6)},{" "}
-                  {report.controlPoint[0].toFixed(6)}
+                  {point.coordinates[1].toFixed(6)},{" "}
+                  {point.coordinates[0].toFixed(6)}
                 </span>
               </p>
-            )}
+            ))}
             <Link
               href={`/interventions/${intervention.id}/map`}
               className="inline-block text-sm font-medium text-accent underline"
@@ -273,13 +320,15 @@ export function InterventionReportView({
         <ul className="mt-3 space-y-3">
           <li className="flex items-start justify-between gap-3 text-sm">
             <div>
-              <p className="font-medium text-foreground">
-                Zona I — Medidas Urgentes
-              </p>
-              {limitZoneI && (
-                <p className="text-xs text-muted">
-                  {formatZoneILimit(limitZoneI)}
-                </p>
+              <p className="font-medium text-foreground">{belts.innerTitle}</p>
+              {intervention.zoneParams.zoningPhase !== "initial-cordon" &&
+                limitZoneI && (
+                  <p className="text-xs text-muted">
+                    {formatZoneILimit(limitZoneI)}
+                  </p>
+                )}
+              {belts.innerNote && (
+                <p className="text-xs text-muted">{belts.innerNote}</p>
               )}
             </div>
             <span className="shrink-0 text-muted">
@@ -288,11 +337,15 @@ export function InterventionReportView({
           </li>
           <li className="flex items-start justify-between gap-3 text-sm">
             <div>
-              <p className="font-medium text-foreground">Zona II — Alerta</p>
-              {limitZoneII && (
-                <p className="text-xs text-muted">
-                  {formatZoneIILimit(limitZoneII)}
-                </p>
+              <p className="font-medium text-foreground">{belts.outerTitle}</p>
+              {intervention.zoneParams.zoningPhase !== "initial-cordon" &&
+                limitZoneII && (
+                  <p className="text-xs text-muted">
+                    {formatZoneIILimit(limitZoneII)}
+                  </p>
+                )}
+              {belts.outerNote && (
+                <p className="text-xs text-muted">{belts.outerNote}</p>
               )}
             </div>
             <span className="shrink-0 text-muted">

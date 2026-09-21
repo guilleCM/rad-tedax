@@ -1,30 +1,9 @@
-import type {
-  DoseLimitBound,
-  DoseLimitOp,
-  DoseUnit,
-  ZoneIILimit,
-} from "@/lib/types";
-
-export const DOSE_LIMIT_OPS: { value: DoseLimitOp; label: string }[] = [
-  { value: "lt", label: "<" },
-  { value: "lte", label: "≤" },
-  { value: "eq", label: "=" },
-  { value: "gt", label: ">" },
-  { value: "gte", label: "≥" },
-];
+import type { DoseLimitBound, DoseUnit, ZoneIILimit } from "@/lib/types";
 
 export const DOSE_UNITS: { value: DoseUnit; label: string }[] = [
   { value: "uSv/h", label: "µSv/h" },
   { value: "mSv/h", label: "mSv/h" },
 ];
-
-const OP_SYMBOL: Record<DoseLimitOp, string> = {
-  lt: "<",
-  lte: "≤",
-  eq: "=",
-  gt: ">",
-  gte: "≥",
-};
 
 const UNIT_LABEL: Record<DoseUnit, string> = {
   "uSv/h": "µSv/h",
@@ -32,7 +11,7 @@ const UNIT_LABEL: Record<DoseUnit, string> = {
 };
 
 export function formatDoseBound(bound: DoseLimitBound): string {
-  return `${OP_SYMBOL[bound.op]} ${bound.value} ${UNIT_LABEL[bound.unit]}`;
+  return `${bound.value} ${UNIT_LABEL[bound.unit]}`;
 }
 
 export function formatZoneILimit(bound: DoseLimitBound): string {

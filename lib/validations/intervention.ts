@@ -33,6 +33,8 @@ export const zoneParamsSchema = z
       .default(DEFAULT_ZONE_PARAMS.radiusZoneIIMeters),
     limitZoneI: doseLimitBoundSchema.default(DEFAULT_ZONE_PARAMS.limitZoneI),
     limitZoneII: zoneIILimitSchema.default(DEFAULT_ZONE_PARAMS.limitZoneII),
+    zoningPhase: z.enum(["initial-cordon", "measured"]).optional(),
+    zoneIEstimated: z.boolean().optional(),
   })
   .refine((p) => p.radiusZoneIIMeters >= p.radiusZoneIMeters, {
     message: "radiusZoneIIMeters must be >= radiusZoneIMeters",
@@ -89,6 +91,13 @@ export const createInterventionSchema = z.object({
   zoneParams: zoneParamsSchema.optional(),
 });
 
+const geoJsonPointSchema = z.object({
+  type: z.literal("Point"),
+  coordinates: lngLatSchema,
+});
+
+const nullableGeoJsonPointSchema = geoJsonPointSchema.nullable().optional();
+
 export const updateInterventionSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   occurredAt: z.coerce.date().optional(),
@@ -99,14 +108,21 @@ export const updateInterventionSchema = z.object({
   manualOverrides: z
     .object({
       notes: z.string().max(2000).optional(),
-      clearZones: z.boolean().optional(),
-      controlPoint: z
-        .object({
-          type: z.literal("Point"),
-          coordinates: lngLatSchema,
-        })
-        .nullable()
+      annotations: z
+        .array(
+          z.object({
+            text: z.string().trim().min(1).max(500),
+            createdAt: z.coerce.date(),
+          }),
+        )
+        .max(100)
         .optional(),
+      clearZones: z.boolean().optional(),
+      controlPoint: nullableGeoJsonPointSchema,
+      decontaminationStation: nullableGeoJsonPointSchema,
+      advancedCommandPost: nullableGeoJsonPointSchema,
+      entryExit: nullableGeoJsonPointSchema,
+      alertReading: nullableGeoJsonPointSchema,
     })
     .optional(),
   operationDosimetry: operationDosimetrySchema.optional(),

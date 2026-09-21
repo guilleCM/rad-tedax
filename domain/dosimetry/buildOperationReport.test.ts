@@ -161,10 +161,25 @@ describe("buildOperationReport", () => {
           type: "Point",
           coordinates: [2.17, 41.38],
         },
+        decontaminationStation: {
+          type: "Point",
+          coordinates: [2.16, 41.37],
+        },
       },
     });
 
     expect(report.summaryNotes).toBe("Revisión completada");
-    expect(report.controlPoint).toEqual([2.17, 41.38]);
+    expect(report.tacticalPoints).toEqual([
+      {
+        kind: "controlPoint",
+        label: "Punto de control",
+        coordinates: [2.17, 41.38],
+      },
+      {
+        kind: "decontaminationStation",
+        label: "Estación de descontaminación",
+        coordinates: [2.16, 41.37],
+      },
+    ]);
   });
 });

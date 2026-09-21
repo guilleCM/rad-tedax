@@ -24,6 +24,7 @@ import {
 import {
   DEFAULT_OPERATION_DOSIMETRY,
   DEFAULT_ZONE_PARAMS,
+  TACTICAL_POINT_KINDS,
   type InterventionDoc,
   type InterventionZones,
   type ManualOverrides,
@@ -70,7 +71,12 @@ function buildZones(
 }
 
 export function serializeIntervention(doc: InterventionDoc) {
-  const zoneParams = { ...DEFAULT_ZONE_PARAMS, ...doc.zoneParams };
+  const zoneParams = {
+    ...DEFAULT_ZONE_PARAMS,
+    ...doc.zoneParams,
+    zoningPhase: doc.zoneParams.zoningPhase ?? "measured",
+    zoneIEstimated: doc.zoneParams.zoneIEstimated ?? false,
+  };
   return {
     id: doc._id.toString(),
     name: doc.name,
@@ -93,7 +99,18 @@ export function serializeIntervention(doc: InterventionDoc) {
           computedFrom: doc.zones.computedFrom,
         }
       : null,
-    manualOverrides: doc.manualOverrides ?? null,
+    manualOverrides: doc.manualOverrides
+      ? {
+          ...doc.manualOverrides,
+          annotations: doc.manualOverrides.annotations?.map((annotation) => ({
+            text: annotation.text,
+            createdAt:
+              annotation.createdAt instanceof Date
+                ? annotation.createdAt.toISOString()
+                : annotation.createdAt,
+          })),
+        }
+      : null,
     operationDosimetry: {
       ...DEFAULT_OPERATION_DOSIMETRY,
       ...doc.operationDosimetry,
@@ -259,8 +276,13 @@ export async function updateIntervention(
     zoneParams?: ZoneParams;
     manualOverrides?: {
       notes?: string;
+      annotations?: ManualOverrides["annotations"];
       clearZones?: boolean;
       controlPoint?: ManualOverrides["controlPoint"] | null;
+      decontaminationStation?: ManualOverrides["decontaminationStation"] | null;
+      advancedCommandPost?: ManualOverrides["advancedCommandPost"] | null;
+      entryExit?: ManualOverrides["entryExit"] | null;
+      alertReading?: ManualOverrides["alertReading"] | null;
     };
     operationDosimetry?: OperationDosimetry;
     recalculate?: boolean;
@@ -303,6 +325,14 @@ export async function updateIntervention(
           input.zoneParams.limitZoneII ??
           doc.zoneParams.limitZoneII ??
           DEFAULT_ZONE_PARAMS.limitZoneII,
+        zoningPhase:
+          input.zoneParams.zoningPhase ??
+          doc.zoneParams.zoningPhase ??
+          "measured",
+        zoneIEstimated:
+          input.zoneParams.zoneIEstimated ??
+          doc.zoneParams.zoneIEstimated ??
+          false,
       }
     : { ...DEFAULT_ZONE_PARAMS, ...doc.zoneParams };
   if (input.zoneParams) patch.zoneParams = zoneParams;
@@ -356,28 +386,52 @@ export async function updateIntervention(
         zoneI: undefined,
         zoneII: undefined,
         notes: input.manualOverrides.notes ?? doc.manualOverrides?.notes,
-        controlPoint:
-          input.manualOverrides.controlPoint === undefined
-            ? doc.manualOverrides?.controlPoint
-            : input.manualOverrides.controlPoint ?? undefined,
+        annotations:
+          input.manualOverrides.annotations ?? doc.manualOverrides?.annotations,
       };
+      for (const kind of TACTICAL_POINT_KINDS) {
+        patch.manualOverrides[kind] =
+          input.manualOverrides[kind] === undefined
+            ? doc.manualOverrides?.[kind]
+            : input.manualOverrides[kind] ?? undefined;
+      }
+      patch.manualOverrides.alertReading =
+        input.manualOverrides.alertReading === undefined
+          ? doc.manualOverrides?.alertReading
+          : input.manualOverrides.alertReading ?? undefined;
     }
   }
 
+  const hasTacticalPointPatch = TACTICAL_POINT_KINDS.some(
+    (kind) => input.manualOverrides?.[kind] !== undefined,
+  );
+  const hasAlertReadingPatch = input.manualOverrides?.alertReading !== undefined;
+
   if (
-    input.manualOverrides?.notes !== undefined ||
-    input.manualOverrides?.controlPoint !== undefined
+    input.manualOverrides &&
+    (input.manualOverrides.notes !== undefined ||
+      input.manualOverrides.annotations !== undefined ||
+      hasTacticalPointPatch ||
+      hasAlertReadingPatch)
   ) {
+    const source = input.manualOverrides;
     const overrides: ManualOverrides = {
       ...(doc.manualOverrides ?? {}),
       ...(patch.manualOverrides ?? {}),
     };
-    if (input.manualOverrides.notes !== undefined) {
-      overrides.notes = input.manualOverrides.notes;
+    if (source.notes !== undefined) {
+      overrides.notes = source.notes;
     }
-    if (input.manualOverrides.controlPoint !== undefined) {
-      overrides.controlPoint =
-        input.manualOverrides.controlPoint ?? undefined;
+    if (source.annotations !== undefined) {
+      overrides.annotations = source.annotations;
+    }
+    for (const kind of TACTICAL_POINT_KINDS) {
+      if (source[kind] !== undefined) {
+        overrides[kind] = source[kind] ?? undefined;
+      }
+    }
+    if (source.alertReading !== undefined) {
+      overrides.alertReading = source.alertReading ?? undefined;
     }
     patch.manualOverrides = overrides;
   }

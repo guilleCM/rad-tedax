@@ -7,11 +7,23 @@ import {
   MAP_IDLE_TIMEOUT_MS,
   type ZoneOverlay,
 } from "@/lib/map/interventionMapShared";
+import {
+  TACTICAL_POINT_COLORS,
+  type TacticalPointCoordinates,
+} from "@/lib/map/tacticalPoints";
+import {
+  TACTICAL_POINT_ICON_PATHS,
+  TACTICAL_POINT_ICON_VIEWBOX,
+  tacticalIconPathStrokes,
+} from "@/lib/map/tacticalPointIcons";
+import { TACTICAL_POINT_KINDS, type TacticalPointKind } from "@/lib/types";
 
 const JPEG_QUALITY = 0.85;
 
 const DANGER_POINT_SIZE = 30;
-const CONTROL_POINT_SIZE = 26;
+const TACTICAL_PIN_WIDTH = 22;
+const TACTICAL_PIN_HEIGHT = 28;
+const TACTICAL_PIN_ICON_SIZE = 12;
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -54,41 +66,61 @@ function drawZoneCircles(
   }
 }
 
-function drawControlPointMarker(
+function drawTacticalPointMarker(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
+  kind: TacticalPointKind,
 ) {
-  const size = CONTROL_POINT_SIZE;
-  const half = size / 2;
+  const width = TACTICAL_PIN_WIDTH;
+  const height = TACTICAL_PIN_HEIGHT;
+  const colors = TACTICAL_POINT_COLORS[kind];
 
   ctx.save();
-  ctx.translate(x, y - half);
-  ctx.fillStyle = "#16a34a";
-  ctx.strokeStyle = "#14532d";
-  ctx.lineWidth = 1.5;
+  ctx.translate(x - width / 2, y - height);
 
   ctx.beginPath();
-  ctx.moveTo(half, size * 0.15);
-  ctx.bezierCurveTo(half, size * 0.15, size * 0.85, size * 0.55, size * 0.85, size * 0.75);
-  ctx.bezierCurveTo(size * 0.85, size * 0.9, half, size, half, size);
-  ctx.bezierCurveTo(half, size, size * 0.15, size * 0.9, size * 0.15, size * 0.75);
-  ctx.bezierCurveTo(size * 0.15, size * 0.55, half, size * 0.15, half, size * 0.15);
+  ctx.moveTo(width / 2, height);
+  ctx.bezierCurveTo(width * 0.12, height * 0.62, 1, height * 0.38, 1, height * 0.34);
+  ctx.arc(width / 2, height * 0.34, width / 2 - 1, Math.PI, 0, false);
+  ctx.bezierCurveTo(
+    width - 1,
+    height * 0.38,
+    width * 0.88,
+    height * 0.62,
+    width / 2,
+    height,
+  );
   ctx.closePath();
+  ctx.fillStyle = colors.fill;
+  ctx.strokeStyle = colors.stroke;
+  ctx.lineWidth = 1.5;
   ctx.fill();
   ctx.stroke();
 
-  ctx.beginPath();
-  ctx.moveTo(half, size);
-  ctx.lineTo(half, size * 1.15);
-  ctx.stroke();
+  const scale = TACTICAL_PIN_ICON_SIZE / TACTICAL_POINT_ICON_VIEWBOX;
+  ctx.translate(
+    width / 2 - TACTICAL_PIN_ICON_SIZE / 2,
+    height * 0.34 - TACTICAL_PIN_ICON_SIZE / 2,
+  );
+  ctx.scale(scale, scale);
+  ctx.lineWidth = 2.4;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const iconStrokes = tacticalIconPathStrokes(kind, colors.icon);
+  TACTICAL_POINT_ICON_PATHS[kind].forEach((d, index) => {
+    ctx.strokeStyle = iconStrokes[index];
+    ctx.stroke(new Path2D(d));
+  });
+
   ctx.restore();
 }
 
 export type CaptureMapSnapshotInput = {
   map: Map;
   coordinates: [number, number];
-  controlPoint?: [number, number] | null;
+  tacticalPoints?: TacticalPointCoordinates | null;
+  alertReading?: [number, number] | null;
   radiusZoneIMeters: number;
   radiusZoneIIMeters: number;
 };
@@ -96,8 +128,14 @@ export type CaptureMapSnapshotInput = {
 export async function captureMapSnapshot(
   input: CaptureMapSnapshotInput,
 ): Promise<string | null> {
-  const { map, coordinates, controlPoint, radiusZoneIMeters, radiusZoneIIMeters } =
-    input;
+  const {
+    map,
+    coordinates,
+    tacticalPoints,
+    alertReading,
+    radiusZoneIMeters,
+    radiusZoneIIMeters,
+  } = input;
 
   try {
     await waitForMapIdle(map, MAP_IDLE_TIMEOUT_MS);
@@ -137,9 +175,22 @@ export async function captureMapSnapshot(
       DANGER_POINT_SIZE,
     );
 
-    if (controlPoint) {
-      const controlProjected = map.project(controlPoint);
-      drawControlPointMarker(ctx, controlProjected.x, controlProjected.y);
+    for (const kind of TACTICAL_POINT_KINDS) {
+      const point = tacticalPoints?.[kind];
+      if (!point) continue;
+      const projected = map.project(point);
+      drawTacticalPointMarker(ctx, projected.x, projected.y, kind);
+    }
+
+    if (alertReading) {
+      const reading = map.project(alertReading);
+      ctx.beginPath();
+      ctx.arc(reading.x, reading.y, 7, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(250, 204, 21, 0.85)";
+      ctx.strokeStyle = "#a16207";
+      ctx.lineWidth = 2;
+      ctx.fill();
+      ctx.stroke();
     }
 
     return composite.toDataURL("image/jpeg", JPEG_QUALITY);

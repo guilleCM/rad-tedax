@@ -1,4 +1,14 @@
 import { LngLatBounds, type Map, type StyleSpecification } from "maplibre-gl";
+import {
+  TACTICAL_POINT_COLORS,
+  TACTICAL_POINT_LABELS,
+} from "@/lib/map/tacticalPoints";
+import {
+  TACTICAL_POINT_ICON_PATHS,
+  TACTICAL_POINT_ICON_VIEWBOX,
+  tacticalIconPathStrokes,
+} from "@/lib/map/tacticalPointIcons";
+import type { TacticalPointKind } from "@/lib/types";
 
 export const STREETS_STYLE: StyleSpecification = {
   version: 8,
@@ -67,26 +77,59 @@ export function lock2DView(map: Map) {
   map.keyboard.disableRotation();
 }
 
+export function createAlertReadingMarkerElement(): HTMLDivElement {
+  const el = document.createElement("div");
+  el.setAttribute("aria-label", "Lectura 100 µSv/h");
+  el.style.width = "16px";
+  el.style.height = "16px";
+  el.style.borderRadius = "9999px";
+  el.style.border = "2px solid #a16207";
+  el.style.background = "rgba(250, 204, 21, 0.85)";
+  el.style.boxShadow = "0 1px 2px rgba(0,0,0,0.45)";
+  return el;
+}
+
 export function createDangerPointMarkerElement(): HTMLImageElement {
   const img = document.createElement("img");
   img.src = "/danger-point.png";
-  img.alt = "Punto de intervención";
+  img.alt = "Fuente radiológica";
   img.width = 30;
   img.height = 30;
   img.draggable = false;
   return img;
 }
 
-export function createControlPointMarkerElement(): HTMLDivElement {
+export const TACTICAL_MARKER_WIDTH = 28;
+export const TACTICAL_MARKER_HEIGHT = 36;
+/** Lado del icono dentro de la cabeza del pin, en unidades del marcador. */
+export const TACTICAL_MARKER_ICON_SIZE = 15;
+export const TACTICAL_MARKER_HEAD_CENTER = { x: 14, y: 12.6 };
+export const TACTICAL_MARKER_PIN_PATH =
+  "M14 1.5c6.35 0 11.5 5.15 11.5 11.5 0 8.6-11.5 21-11.5 21S2.5 21.6 2.5 13C2.5 6.65 7.65 1.5 14 1.5z";
+
+export function createTacticalPointMarkerElement(
+  kind: TacticalPointKind,
+): HTMLDivElement {
   const el = document.createElement("div");
-  el.setAttribute("aria-label", "Punto de control");
-  el.style.width = "28px";
-  el.style.height = "28px";
+  const colors = TACTICAL_POINT_COLORS[kind];
+  const scale = TACTICAL_MARKER_ICON_SIZE / TACTICAL_POINT_ICON_VIEWBOX;
+  const offsetX = TACTICAL_MARKER_HEAD_CENTER.x - TACTICAL_MARKER_ICON_SIZE / 2;
+  const offsetY = TACTICAL_MARKER_HEAD_CENTER.y - TACTICAL_MARKER_ICON_SIZE / 2;
+  const iconPaths = TACTICAL_POINT_ICON_PATHS[kind]
+    .map((d, index) => {
+      const stroke = tacticalIconPathStrokes(kind, colors.icon)[index];
+      return `<path d="${d}" stroke="${stroke}"/>`;
+    })
+    .join("");
+
+  el.setAttribute("aria-label", TACTICAL_POINT_LABELS[kind]);
+  el.style.width = `${TACTICAL_MARKER_WIDTH}px`;
+  el.style.height = `${TACTICAL_MARKER_HEIGHT}px`;
   el.style.display = "flex";
   el.style.alignItems = "center";
   el.style.justifyContent = "center";
   el.style.filter = "drop-shadow(0 1px 2px rgba(0,0,0,0.45))";
-  el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="#16a34a" stroke="#14532d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg>`;
+  el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${TACTICAL_MARKER_WIDTH}" height="${TACTICAL_MARKER_HEIGHT}" viewBox="0 0 ${TACTICAL_MARKER_WIDTH} ${TACTICAL_MARKER_HEIGHT}" aria-hidden="true"><path d="${TACTICAL_MARKER_PIN_PATH}" fill="${colors.fill}" stroke="${colors.stroke}" stroke-width="1.5"/><g transform="translate(${offsetX} ${offsetY}) scale(${scale})" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${iconPaths}</g></svg>`;
   return el;
 }
 
@@ -146,7 +189,7 @@ export function fitToZonesOrPoint(
   map: Map,
   coordinates: [number, number] | null,
   radiusII: number,
-  controlPoint?: [number, number] | null,
+  extraPoints?: Array<[number, number] | null | undefined>,
   options?: { padding?: number; maxZoom?: number; duration?: number },
 ) {
   if (!coordinates) return;
@@ -160,8 +203,8 @@ export function fitToZonesOrPoint(
           return b;
         })();
 
-  if (controlPoint) {
-    bounds.extend(controlPoint);
+  for (const point of extraPoints ?? []) {
+    if (point) bounds.extend(point);
   }
 
   map.fitBounds(bounds, {
@@ -244,10 +287,10 @@ export async function fitMapToZonesAndWait(
   map: Map,
   coordinates: [number, number],
   radiusII: number,
-  controlPoint?: [number, number] | null,
+  extraPoints?: Array<[number, number] | null | undefined>,
   options?: { padding?: number; maxZoom?: number; duration?: number },
 ): Promise<void> {
   map.resize();
-  fitToZonesOrPoint(map, coordinates, radiusII, controlPoint, options);
+  fitToZonesOrPoint(map, coordinates, radiusII, extraPoints, options);
   await waitForMapIdle(map);
 }
