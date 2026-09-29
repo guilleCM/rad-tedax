@@ -40,3 +40,66 @@ export async function searchNominatim(
       Number.isFinite(Number.parseFloat(r.lat)),
   );
 }
+
+type NominatimAddress = {
+  road?: string;
+  house_number?: string;
+  city?: string;
+  town?: string;
+  village?: string;
+  municipality?: string;
+  city_district?: string;
+};
+
+type NominatimReverseResult = {
+  display_name?: string;
+  address?: NominatimAddress;
+};
+
+export function formatReversePlaceLabel(
+  result: NominatimReverseResult,
+): string | null {
+  const address = result.address;
+  if (address) {
+    const road = [address.road, address.house_number].filter(Boolean).join(" ");
+    const place =
+      address.city ||
+      address.town ||
+      address.village ||
+      address.municipality ||
+      address.city_district;
+    const line = [road, place].filter(Boolean).join(", ");
+    if (line) return line.slice(0, 200);
+  }
+
+  const displayName = result.display_name?.trim();
+  if (!displayName) return null;
+  return displayName.slice(0, 200);
+}
+
+export async function reverseGeocodeNominatim(
+  longitude: number,
+  latitude: number,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const params = new URLSearchParams({
+    format: "json",
+    lat: String(latitude),
+    lon: String(longitude),
+    zoom: "18",
+    addressdetails: "1",
+  });
+
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/reverse?${params.toString()}`,
+    {
+      headers: { Accept: "application/json" },
+      signal,
+    },
+  );
+
+  if (!res.ok) return null;
+
+  const result = (await res.json()) as NominatimReverseResult;
+  return formatReversePlaceLabel(result);
+}

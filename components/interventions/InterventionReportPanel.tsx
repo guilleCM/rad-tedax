@@ -10,9 +10,11 @@ import {
 import { buildOperationReport } from "@/domain/dosimetry/buildOperationReport";
 import { exportOperationReportPdf } from "@/lib/reports/exportOperationReportPdf";
 import { tacticalPointsFromOverrides } from "@/lib/map/tacticalPoints";
+import { sketchesFromOverrides } from "@/lib/map/sketches";
 import type {
   DoseLimitBound,
   InterventionStatus,
+  MapSketch,
   OperationDosimetry,
   ZoneIILimit,
   ZoneParams,
@@ -56,6 +58,7 @@ type SerializedIntervention = {
       type: "Point";
       coordinates: [number, number];
     };
+    sketches?: MapSketch[];
   } | null;
   operationDosimetry: OperationDosimetry;
   operationParticipants: SerializedOperationParticipant[];
@@ -112,6 +115,7 @@ export function InterventionReportPanel({
           }
           radiusZoneIMeters={intervention.zoneParams.radiusZoneIMeters}
           radiusZoneIIMeters={intervention.zoneParams.radiusZoneIIMeters}
+          sketches={sketchesFromOverrides(intervention.manualOverrides)}
         />
       )}
       <InterventionReportView

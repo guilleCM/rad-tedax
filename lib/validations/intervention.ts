@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_ZONE_PARAMS } from "@/lib/types";
+import { DEFAULT_ZONE_PARAMS, OPERATION_TEAMS } from "@/lib/types";
 
 export const lngLatSchema = z.tuple([
   z.number().min(-180).max(180),
@@ -53,12 +53,12 @@ export const operationDosimetrySchema = z.object({
   }),
 });
 
-export const operationTeamSchema = z.enum(["search", "intervention"]);
+export const operationTeamSchema = z.enum(OPERATION_TEAMS);
 
 export const activeZoneSchema = z.enum(["I", "II"]);
 
 export const addOperationParticipantSchema = z.object({
-  userId: objectIdSchema,
+  name: z.string().trim().min(1, "El nombre es obligatorio").max(120),
   team: operationTeamSchema,
 });
 
@@ -123,6 +123,18 @@ export const updateInterventionSchema = z.object({
       advancedCommandPost: nullableGeoJsonPointSchema,
       entryExit: nullableGeoJsonPointSchema,
       alertReading: nullableGeoJsonPointSchema,
+      sketches: z
+        .array(
+          z.object({
+            id: z.string().trim().min(1).max(64),
+            color: z
+              .enum(["yellow", "blue", "white", "black"])
+              .transform((color) => (color === "blue" ? "black" : color)),
+            coordinates: z.array(lngLatSchema).min(2).max(500),
+          }),
+        )
+        .max(60)
+        .optional(),
     })
     .optional(),
   operationDosimetry: operationDosimetrySchema.optional(),

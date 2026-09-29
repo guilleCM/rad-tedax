@@ -142,7 +142,7 @@ export function ZoneRadioToggle({
     <div
       role="radiogroup"
       aria-label="Zona radiológica"
-      className="flex flex-col gap-1"
+      className="flex flex-col gap-1.5"
     >
       {(["I", "II"] as ActiveZone[]).map((zone) => {
         const styles = ZONE_UI[zone];
@@ -156,14 +156,14 @@ export function ZoneRadioToggle({
             name={name}
             disabled={disabled}
             onClick={() => onChange(zone)}
-            className={`flex w-full items-center justify-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium transition-colors disabled:opacity-50 ${
+            className={`flex w-full items-center justify-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
               selected
                 ? styles.selected
                 : "border-border text-muted hover:bg-surface"
             }`}
           >
             <span
-              className={`h-2 w-2 shrink-0 rounded-full ${
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${
                 selected ? styles.dotFilled : styles.dotOutline
               }`}
               aria-hidden

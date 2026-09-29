@@ -283,6 +283,7 @@ export async function updateIntervention(
       advancedCommandPost?: ManualOverrides["advancedCommandPost"] | null;
       entryExit?: ManualOverrides["entryExit"] | null;
       alertReading?: ManualOverrides["alertReading"] | null;
+      sketches?: ManualOverrides["sketches"];
     };
     operationDosimetry?: OperationDosimetry;
     recalculate?: boolean;
@@ -399,6 +400,10 @@ export async function updateIntervention(
         input.manualOverrides.alertReading === undefined
           ? doc.manualOverrides?.alertReading
           : input.manualOverrides.alertReading ?? undefined;
+      patch.manualOverrides.sketches =
+        input.manualOverrides.sketches === undefined
+          ? doc.manualOverrides?.sketches
+          : input.manualOverrides.sketches;
     }
   }
 
@@ -406,13 +411,15 @@ export async function updateIntervention(
     (kind) => input.manualOverrides?.[kind] !== undefined,
   );
   const hasAlertReadingPatch = input.manualOverrides?.alertReading !== undefined;
+  const hasSketchPatch = input.manualOverrides?.sketches !== undefined;
 
   if (
     input.manualOverrides &&
     (input.manualOverrides.notes !== undefined ||
       input.manualOverrides.annotations !== undefined ||
       hasTacticalPointPatch ||
-      hasAlertReadingPatch)
+      hasAlertReadingPatch ||
+      hasSketchPatch)
   ) {
     const source = input.manualOverrides;
     const overrides: ManualOverrides = {
@@ -432,6 +439,9 @@ export async function updateIntervention(
     }
     if (source.alertReading !== undefined) {
       overrides.alertReading = source.alertReading ?? undefined;
+    }
+    if (source.sketches !== undefined) {
+      overrides.sketches = source.sketches;
     }
     patch.manualOverrides = overrides;
   }

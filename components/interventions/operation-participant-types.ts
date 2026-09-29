@@ -1,8 +1,11 @@
-import type {
-  ActiveZone,
-  OperationTeam,
-  ZoneParams,
+import {
+  OPERATION_TEAM_LABELS,
+  type ActiveZone,
+  type OperationTeam,
+  type ZoneParams,
 } from "@/lib/types";
+
+export { OPERATION_TEAM_LABELS };
 
 export type SerializedZoneSegment = {
   zone: ActiveZone;
@@ -27,11 +30,6 @@ export type SerializedOperationParticipant = {
   isActive: boolean;
   activeZone: ActiveZone | null;
   zoneParams: ZoneParams;
-};
-
-export const OPERATION_TEAM_LABELS: Record<OperationTeam, string> = {
-  search: "Equipo de búsqueda",
-  intervention: "Equipo de intervención",
 };
 
 export const ZONE_UI: Record<

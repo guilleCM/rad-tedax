@@ -21,6 +21,8 @@ import {
   lngLatsFromTacticalPoints,
   type TacticalPointCoordinates,
 } from "@/lib/map/tacticalPoints";
+import { lngLatsFromSketches } from "@/lib/map/sketches";
+import type { MapSketch } from "@/lib/types";
 
 export { MAP_SNAPSHOT_HEIGHT, MAP_SNAPSHOT_WIDTH };
 
@@ -34,6 +36,7 @@ type Props = {
   alertReading?: [number, number] | null;
   radiusZoneIMeters: number;
   radiusZoneIIMeters: number;
+  sketches?: MapSketch[] | null;
 };
 
 export const InterventionMapSnapshot = forwardRef<
@@ -46,6 +49,7 @@ export const InterventionMapSnapshot = forwardRef<
     alertReading = null,
     radiusZoneIMeters,
     radiusZoneIIMeters,
+    sketches = [],
   },
   ref,
 ) {
@@ -56,6 +60,7 @@ export const InterventionMapSnapshot = forwardRef<
   const alertReadingRef = useRef(alertReading);
   const radiusIRef = useRef(radiusZoneIMeters);
   const radiusIIRef = useRef(radiusZoneIIMeters);
+  const sketchesRef = useRef(sketches);
   const readyRef = useRef(false);
 
   useEffect(() => {
@@ -78,6 +83,10 @@ export const InterventionMapSnapshot = forwardRef<
     radiusIIRef.current = radiusZoneIIMeters;
   }, [radiusZoneIIMeters]);
 
+  useEffect(() => {
+    sketchesRef.current = sketches;
+  }, [sketches]);
+
   useImperativeHandle(ref, () => ({
     async capture() {
       const map = mapRef.current;
@@ -96,6 +105,7 @@ export const InterventionMapSnapshot = forwardRef<
         [
           ...lngLatsFromTacticalPoints(tacticalPointsRef.current),
           ...(alertReadingRef.current ? [alertReadingRef.current] : []),
+          ...lngLatsFromSketches(sketchesRef.current),
         ],
         { padding: 48, maxZoom: 17, duration: 0 },
       );
@@ -107,6 +117,7 @@ export const InterventionMapSnapshot = forwardRef<
         alertReading: alertReadingRef.current,
         radiusZoneIMeters: radiusIRef.current,
         radiusZoneIIMeters: radiusIIRef.current,
+        sketches: sketchesRef.current,
       });
     },
   }));
@@ -147,6 +158,7 @@ export const InterventionMapSnapshot = forwardRef<
         [
           ...lngLatsFromTacticalPoints(tacticalPointsRef.current),
           ...(alertReadingRef.current ? [alertReadingRef.current] : []),
+          ...lngLatsFromSketches(sketchesRef.current),
         ],
         { padding: 48, maxZoom: 17, duration: 0 },
       ).then(() => {
@@ -185,10 +197,11 @@ export const InterventionMapSnapshot = forwardRef<
       [
         ...lngLatsFromTacticalPoints(tacticalPoints),
         ...(alertReading ? [alertReading] : []),
+        ...lngLatsFromSketches(sketches),
       ],
       { padding: 48, maxZoom: 17, duration: 0 },
     );
-  }, [coordinates, tacticalPoints, alertReading, radiusZoneIMeters, radiusZoneIIMeters]);
+  }, [coordinates, tacticalPoints, alertReading, radiusZoneIMeters, radiusZoneIIMeters, sketches]);
 
   return (
     <div

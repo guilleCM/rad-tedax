@@ -88,9 +88,9 @@ export function canDeleteIntervention(role: UserRole): boolean {
 export function roleLabel(role: UserRole): string {
   switch (role) {
     case "manager":
-      return "Gestor";
+      return "Administrador";
     case "leader":
-      return "Líder";
+      return "Jefe de grupo";
     case "participant":
       return "Interviniente";
   }

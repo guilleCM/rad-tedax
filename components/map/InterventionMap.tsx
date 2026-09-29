@@ -33,7 +33,22 @@ import {
   type TacticalPointCoordinates,
 } from "@/lib/map/tacticalPoints";
 import { parseLatLng } from "@/lib/map/parseMapQuery";
-import { TACTICAL_POINT_KINDS, type TacticalPointKind } from "@/lib/types";
+import {
+  isFarEnough,
+  MAX_SKETCH_POINTS,
+  SKETCH_CASING_WIDTH,
+  SKETCH_LINE_WIDTH,
+  sketchCasingHex,
+  sketchInkHex,
+  sketchPolylinePoints,
+  type SketchDraft,
+} from "@/lib/map/sketches";
+import {
+  TACTICAL_POINT_KINDS,
+  type MapSketch,
+  type SketchColor,
+  type TacticalPointKind,
+} from "@/lib/types";
 
 type SearchMode = "address" | "coordinates";
 
@@ -41,6 +56,7 @@ export type MapPlacementMode =
   | "none"
   | "measurement"
   | "alert-reading"
+  | "draw"
   | TacticalPointKind;
 
 type Props = {
@@ -50,6 +66,9 @@ type Props = {
   radiusZoneIMeters: number;
   radiusZoneIIMeters: number;
   placementMode?: MapPlacementMode;
+  sketches?: MapSketch[];
+  sketchColor?: SketchColor;
+  onCommitSketch?: (sketch: SketchDraft) => void;
   onSelectPoint: (lngLat: [number, number]) => void;
   onSelectTacticalPoint?: (
     kind: TacticalPointKind,
@@ -102,6 +121,9 @@ export function InterventionMap({
   radiusZoneIMeters,
   radiusZoneIIMeters,
   placementMode = "none",
+  sketches = [],
+  sketchColor = "yellow",
+  onCommitSketch,
   onSelectPoint,
   onSelectTacticalPoint,
   onSelectAlertReading,
@@ -123,11 +145,19 @@ export function InterventionMap({
   const onSelectTacticalRef = useRef(onSelectTacticalPoint);
   const onSelectAlertRef = useRef(onSelectAlertReading);
   const placementModeRef = useRef(placementMode);
+  const sketchesRef = useRef(sketches);
+  const onCommitSketchRef = useRef(onCommitSketch);
+  const drawColorRef = useRef<SketchColor>(sketchColor);
+  const draftCasingRef = useRef<SVGPolylineElement | null>(null);
+  const draftInkRef = useRef<SVGPolylineElement | null>(null);
   const hadCoordinatesRef = useRef(Boolean(coordinates));
   const updateOverlayRef = useRef<() => void>(() => {});
   const [mapError, setMapError] = useState<string | null>(null);
   const [basemap, setBasemap] = useState<BasemapId>("streets");
   const [overlay, setOverlay] = useState<ZoneOverlay | null>(null);
+  const [renderedSketches, setRenderedSketches] = useState<
+    { id: string; color: SketchColor; points: string }[]
+  >([]);
   const [overlayHost, setOverlayHost] = useState<HTMLDivElement | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchMode, setSearchMode] = useState<SearchMode>("address");
@@ -178,11 +208,35 @@ export function InterventionMap({
   }, [onSelectAlertReading]);
 
   useEffect(() => {
+    sketchesRef.current = sketches;
+    updateOverlayRef.current();
+  }, [sketches]);
+
+  useEffect(() => {
+    onCommitSketchRef.current = onCommitSketch;
+  }, [onCommitSketch]);
+
+  useEffect(() => {
+    drawColorRef.current = sketchColor;
+  }, [sketchColor]);
+
+  useEffect(() => {
     placementModeRef.current = placementMode;
     const map = mapRef.current;
     if (!map) return;
-    map.getCanvas().style.cursor =
-      placementMode === "none" ? "" : "crosshair";
+    const canvas = map.getCanvas();
+    canvas.style.cursor = placementMode === "none" ? "" : "crosshair";
+    if (placementMode === "draw") {
+      map.dragPan.disable();
+      map.doubleClickZoom.disable();
+      map.boxZoom.disable();
+      canvas.style.touchAction = "none";
+    } else {
+      map.dragPan.enable();
+      map.doubleClickZoom.enable();
+      map.boxZoom.enable();
+      canvas.style.touchAction = "";
+    }
   }, [placementMode]);
 
   const initialCenter = useMemo<[number, number]>(
@@ -231,6 +285,18 @@ export function InterventionMap({
           radiusIIRef.current,
         ),
       );
+      try {
+        setRenderedSketches(
+          sketchesRef.current.flatMap((sketch) => {
+            const points = sketchPolylinePoints(sketch.coordinates, (lngLat) =>
+              map.project(lngLat),
+            );
+            return points ? [{ id: sketch.id, color: sketch.color, points }] : [];
+          }),
+        );
+      } catch {
+        // The map transform is not ready yet.
+      }
     };
     updateOverlayRef.current = refreshOverlay;
 
@@ -261,6 +327,7 @@ export function InterventionMap({
           [
             ...lngLatsFromTacticalPoints(tacticalPointsRef.current),
             ...(alertReadingRef.current ? [alertReadingRef.current] : []),
+            ...sketchesRef.current.flatMap((sketch) => sketch.coordinates),
           ],
         );
       }
@@ -325,6 +392,112 @@ export function InterventionMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const activeMap = mapRef.current;
+    if (!activeMap || placementMode !== "draw") return;
+
+    const canvas = activeMap.getCanvas();
+    const pointers = new Set<number>();
+    let stroke: [number, number][] = [];
+    let screenPoints: string[] = [];
+    let last: { x: number; y: number } | null = null;
+    let activeId: number | null = null;
+    let cancelled = false;
+    let strokeColor: SketchColor = drawColorRef.current;
+
+    function hideDraft() {
+      for (const line of [draftCasingRef.current, draftInkRef.current]) {
+        if (!line) continue;
+        line.setAttribute("points", "");
+        line.style.display = "none";
+      }
+    }
+
+    function showDraft(points: string) {
+      const casing = draftCasingRef.current;
+      const ink = draftInkRef.current;
+      if (!casing || !ink) return;
+      casing.setAttribute("points", points);
+      ink.setAttribute("points", points);
+      ink.setAttribute("stroke", sketchInkHex(strokeColor));
+      casing.setAttribute("stroke", sketchCasingHex(strokeColor));
+      casing.style.display = "";
+      ink.style.display = "";
+    }
+
+    function resetStroke() {
+      stroke = [];
+      screenPoints = [];
+      last = null;
+      activeId = null;
+      hideDraft();
+    }
+
+    function pushPoint(event: PointerEvent, force: boolean) {
+      if (!activeMap) return;
+      const rect = activeMap.getContainer().getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      if (!force && !isFarEnough(last, { x, y })) return;
+      if (stroke.length >= MAX_SKETCH_POINTS) return;
+      const lngLat = activeMap.unproject([x, y]);
+      stroke.push([lngLat.lng, lngLat.lat]);
+      screenPoints.push(`${x},${y}`);
+      last = { x, y };
+      showDraft(screenPoints.join(" "));
+    }
+
+    function onPointerDown(event: PointerEvent) {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      pointers.add(event.pointerId);
+      if (pointers.size > 1) {
+        cancelled = true;
+        resetStroke();
+        return;
+      }
+      if (event.pointerType !== "touch") event.preventDefault();
+      cancelled = false;
+      activeId = event.pointerId;
+      strokeColor = drawColorRef.current;
+      canvas.setPointerCapture(event.pointerId);
+      pushPoint(event, true);
+    }
+
+    function onPointerMove(event: PointerEvent) {
+      if (cancelled || event.pointerId !== activeId || pointers.size !== 1) return;
+      if (event.pointerType !== "touch") event.preventDefault();
+      pushPoint(event, false);
+    }
+
+    function onPointerUp(event: PointerEvent) {
+      pointers.delete(event.pointerId);
+      if (event.pointerId !== activeId) {
+        if (pointers.size === 0) cancelled = false;
+        return;
+      }
+      const finished =
+        !cancelled && stroke.length >= 2
+          ? { color: strokeColor, coordinates: stroke.slice() }
+          : null;
+      resetStroke();
+      cancelled = pointers.size > 0;
+      if (finished) onCommitSketchRef.current?.(finished);
+    }
+
+    canvas.addEventListener("pointerdown", onPointerDown, { passive: false });
+    canvas.addEventListener("pointermove", onPointerMove, { passive: false });
+    canvas.addEventListener("pointerup", onPointerUp);
+    canvas.addEventListener("pointercancel", onPointerUp);
+
+    return () => {
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointercancel", onPointerUp);
+      hideDraft();
+    };
+  }, [placementMode]);
+
   // Marker + fit on first point only
   useEffect(() => {
     const map = mapRef.current;
@@ -359,6 +532,7 @@ export function InterventionMap({
         [
           ...lngLatsFromTacticalPoints(tacticalPointsRef.current),
           ...(alertReadingRef.current ? [alertReadingRef.current] : []),
+          ...sketchesRef.current.flatMap((sketch) => sketch.coordinates),
         ],
       );
     }
@@ -521,14 +695,12 @@ export function InterventionMap({
       <div className="relative h-[min(70vh,560px)] w-full overflow-hidden rounded-lg border border-border bg-surface">
         <div ref={containerRef} className="absolute inset-0 h-full w-full" />
         {overlayHost &&
-          overlay &&
-          (overlay.rI > 0 || overlay.rII > 0) &&
           createPortal(
             <svg
               className="pointer-events-none absolute inset-0 z-[1] h-full w-full"
               aria-hidden
             >
-              {overlay.rII > 0 && (
+              {overlay && overlay.rII > 0 && (
                 <circle
                   cx={overlay.cx}
                   cy={overlay.cy}
@@ -539,7 +711,7 @@ export function InterventionMap({
                   strokeWidth={2.5}
                 />
               )}
-              {overlay.rI > 0 && (
+              {overlay && overlay.rI > 0 && (
                 <circle
                   cx={overlay.cx}
                   cy={overlay.cy}
@@ -550,6 +722,46 @@ export function InterventionMap({
                   strokeWidth={2.5}
                 />
               )}
+              {renderedSketches.map((sketch) => (
+                <g key={sketch.id}>
+                  <polyline
+                    points={sketch.points}
+                    fill="none"
+                    stroke={sketchCasingHex(sketch.color)}
+                    strokeWidth={SKETCH_CASING_WIDTH}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <polyline
+                    points={sketch.points}
+                    fill="none"
+                    stroke={sketchInkHex(sketch.color)}
+                    strokeWidth={SKETCH_LINE_WIDTH}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </g>
+              ))}
+              <polyline
+                ref={draftCasingRef}
+                points=""
+                fill="none"
+                stroke={sketchCasingHex("yellow")}
+                strokeWidth={SKETCH_CASING_WIDTH}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ display: "none" }}
+              />
+              <polyline
+                ref={draftInkRef}
+                points=""
+                fill="none"
+                stroke={sketchInkHex("yellow")}
+                strokeWidth={SKETCH_LINE_WIDTH}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ display: "none" }}
+              />
             </svg>,
             overlayHost,
           )}

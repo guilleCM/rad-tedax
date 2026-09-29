@@ -75,6 +75,16 @@ export type GeoJsonLngLatPoint = {
   coordinates: [number, number];
 };
 
+export const SKETCH_COLORS = ["yellow", "black", "white"] as const;
+
+export type SketchColor = (typeof SKETCH_COLORS)[number];
+
+export interface MapSketch {
+  id: string;
+  color: SketchColor;
+  coordinates: [number, number][];
+}
+
 export const TACTICAL_POINT_KINDS = [
   "controlPoint",
   "decontaminationStation",
@@ -98,11 +108,27 @@ export interface ManualOverrides {
   entryExit?: GeoJsonLngLatPoint;
   /** Punto donde el radiámetro lee 100 µSv/h. */
   alertReading?: GeoJsonLngLatPoint;
+  /** Trazos libres anclados al terreno. */
+  sketches?: MapSketch[];
 }
 
 export type AccumulatedDoseUnit = "mSv" | "uSv";
 
-export type OperationTeam = "search" | "intervention";
+export const OPERATION_TEAMS = [
+  "search",
+  "intervention",
+  "support",
+  "decontamination",
+] as const;
+
+export type OperationTeam = (typeof OPERATION_TEAMS)[number];
+
+export const OPERATION_TEAM_LABELS: Record<OperationTeam, string> = {
+  search: "Búsqueda y localización",
+  intervention: "Intervención",
+  support: "Apoyo y socorro",
+  decontamination: "Descontaminación",
+};
 
 export type ActiveZone = "I" | "II";
 

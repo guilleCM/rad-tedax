@@ -11,6 +11,7 @@ import {
 } from "@/domain/dosimetry/closeActiveSessions";
 import { findInterventionById, updateInterventionById } from "@/lib/repositories/interventions";
 import { findUserById } from "@/lib/repositories/users";
+import { createParticipantRegistry } from "@/lib/services/users";
 import { AppError } from "@/lib/errors";
 import { canUpdateIntervention } from "@/lib/services/permissions";
 import {
@@ -83,34 +84,21 @@ export async function addOperationParticipant(
   interventionId: string,
   actorId: string,
   role: UserRole,
-  input: { userId: string; team: OperationTeam },
+  input: { name: string; team: OperationTeam },
 ) {
   const doc = await loadIntervention(interventionId);
   assertCanEdit(doc, actorId, role);
 
-  const user = await findUserById(input.userId);
-  if (!user || user.role !== "participant") {
-    throw new AppError(
-      "VALIDATION",
-      "El interviniente seleccionado no es válido",
-      400,
-    );
-  }
+  const created = await createParticipantRegistry(role, actorId, {
+    name: input.name,
+  });
 
   const participants = getOperationParticipants(doc);
-  if (findParticipant(participants, input.userId)) {
-    throw new AppError(
-      "CONFLICT",
-      "El interviniente ya está asignado a esta operación",
-      409,
-    );
-  }
-
   const now = new Date();
   const nextParticipants: OperationParticipant[] = [
     ...participants,
     {
-      userId: new ObjectId(input.userId),
+      userId: new ObjectId(created.id),
       team: input.team,
       addedAt: now,
       sessions: [],
@@ -119,7 +107,7 @@ export async function addOperationParticipant(
 
   const participantIds = [
     ...(doc.participantIds ?? []),
-    new ObjectId(input.userId),
+    new ObjectId(created.id),
   ];
 
   const updated = await saveParticipants(
@@ -132,14 +120,14 @@ export async function addOperationParticipant(
   const zoneParams = getZoneParams(updated);
   const record = findParticipant(
     getOperationParticipants(updated),
-    input.userId,
+    created.id,
   )!;
 
   return serializeParticipantRecord(
     record,
-    input.userId,
+    created.id,
     zoneParams,
-    user.name,
+    created.name,
   );
 }
 

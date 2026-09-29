@@ -3,9 +3,10 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Gauge, Icon, Pencil, Radiation, FilePen, Trash2 } from "lucide-react";
+import { AlertCircle, Gauge, Icon, Pencil, Radiation, FilePen, Trash2, Undo2 } from "lucide-react";
 import type { ZoneFeature } from "@/domain/zones/types";
 import { apiFetch } from "@/lib/api-client";
+import { reverseGeocodeNominatim } from "@/lib/geocoding/nominatim-client";
 import { FinalizeOperationButton } from "@/components/interventions/FinalizeOperationButton";
 import { useReportInterventionSave } from "@/components/interventions/InterventionHeaderContext";
 import { Button, Input, Label } from "@/components/ui/forms";
@@ -20,6 +21,9 @@ import {
   type InterventionStatus,
   type TacticalPointKind,
   type ZoneIILimit,
+  type MapSketch,
+  type SketchColor,
+  SKETCH_COLORS,
 } from "@/lib/types";
 import {
   TACTICAL_POINT_LABELS,
@@ -29,6 +33,13 @@ import {
   type TacticalPointCoordinates,
 } from "@/lib/map/tacticalPoints";
 import { TACTICAL_POINT_ICON_NODES } from "@/lib/map/tacticalPointIcons";
+import {
+  MAX_SKETCHES,
+  SKETCH_COLOR_HEX,
+  SKETCH_COLOR_LABELS,
+  sketchesFromOverrides,
+  type SketchDraft,
+} from "@/lib/map/sketches";
 import {
   formatAnnotationTime,
   resolveAnnotations,
@@ -119,6 +130,7 @@ type SerializedIntervention = {
       type: "Point";
       coordinates: [number, number];
     };
+    sketches?: MapSketch[];
   } | null;
 };
 
@@ -136,6 +148,8 @@ type MapPersistSnapshot = {
   zoningPhase: ZoningPhase;
   zoneIEstimated: boolean;
   formulaVersion: string;
+  sketches: MapSketch[];
+  locationLabel: string;
 };
 
 function loadAnnotations(intervention: SerializedIntervention): AnnotationRecord[] {
@@ -173,8 +187,10 @@ function buildPersistBody(snapshot: MapPersistSnapshot) {
       alertReading: snapshot.alertReading
         ? { type: "Point" as const, coordinates: snapshot.alertReading }
         : null,
+      sketches: snapshot.sketches,
     },
     recalculate: true,
+    locationLabel: snapshot.locationLabel,
   };
 }
 
@@ -314,6 +330,9 @@ export function InterventionMapPanel({
   const [coordinates, setCoordinates] = useState<[number, number] | null>(
     intervention.location?.point.coordinates ?? null,
   );
+  const [locationLabel, setLocationLabel] = useState(
+    intervention.location?.label ?? "",
+  );
   const [tacticalPoints, setTacticalPoints] = useState<TacticalPointCoordinates>(
     tacticalPointsFromOverrides(intervention.manualOverrides),
   );
@@ -344,6 +363,11 @@ export function InterventionMapPanel({
   const [annotations, setAnnotations] = useState<AnnotationRecord[]>(() =>
     loadAnnotations(intervention),
   );
+  const [sketches, setSketches] = useState<MapSketch[]>(() =>
+    sketchesFromOverrides(intervention.manualOverrides),
+  );
+  const [sketchColor, setSketchColor] = useState<SketchColor>("yellow");
+  const [clearSketchesArmed, setClearSketchesArmed] = useState(false);
   const [annotationDraft, setAnnotationDraft] = useState("");
   const [notesOpen, setNotesOpen] = useState(
     () => loadAnnotations(intervention).length > 0,
@@ -361,6 +385,9 @@ export function InterventionMapPanel({
 
   const savingRef = useRef(false);
   const pendingPersistRef = useRef(false);
+  const pendingOverridesRef = useRef<Partial<MapPersistSnapshot> | null>(null);
+  const placeLookupRef = useRef(0);
+  const placeLabelEditedRef = useRef(false);
   const lastSavedPayloadRef = useRef(
     serializePersistPayload({
       coordinates: intervention.location?.point.coordinates ?? null,
@@ -375,6 +402,8 @@ export function InterventionMapPanel({
       zoningPhase: intervention.zoneParams.zoningPhase ?? "measured",
       zoneIEstimated: intervention.zoneParams.zoneIEstimated ?? false,
       formulaVersion: intervention.zoneParams.formulaVersion,
+      sketches: sketchesFromOverrides(intervention.manualOverrides),
+      locationLabel: intervention.location?.label ?? "",
     }),
   );
 
@@ -398,6 +427,8 @@ export function InterventionMapPanel({
       zoningPhase,
       zoneIEstimated,
       formulaVersion,
+      sketches,
+      locationLabel,
       ...overrides,
     }),
     [
@@ -412,6 +443,8 @@ export function InterventionMapPanel({
       zoningPhase,
       zoneIEstimated,
       formulaVersion,
+      sketches,
+      locationLabel,
     ],
   );
 
@@ -441,6 +474,10 @@ export function InterventionMapPanel({
       }
 
       if (savingRef.current) {
+        pendingOverridesRef.current = {
+          ...(pendingOverridesRef.current ?? {}),
+          ...overrides,
+        };
         pendingPersistRef.current = true;
         return false;
       }
@@ -456,24 +493,25 @@ export function InterventionMapPanel({
       });
       savingRef.current = false;
 
+      const flushPending = () => {
+        if (!pendingPersistRef.current) return;
+        const pending = pendingOverridesRef.current ?? {};
+        pendingOverridesRef.current = null;
+        pendingPersistRef.current = false;
+        void persistMapStateRef.current(pending);
+      };
+
       if (!result.ok) {
         reportSaveState("idle");
         setError(result.error.message);
-        if (pendingPersistRef.current) {
-          pendingPersistRef.current = false;
-          void persistMapStateRef.current();
-        }
+        flushPending();
         return false;
       }
 
       lastSavedPayloadRef.current = serialized;
       reportSaveState("saved");
       router.refresh();
-
-      if (pendingPersistRef.current) {
-        pendingPersistRef.current = false;
-        void persistMapStateRef.current();
-      }
+      flushPending();
 
       return true;
     },
@@ -495,6 +533,29 @@ export function InterventionMapPanel({
     const id = window.setTimeout(() => setToast(null), 4000);
     return () => window.clearTimeout(id);
   }, [toast]);
+
+  const refreshPlaceLabel = useCallback(
+    (lngLat: [number, number]) => {
+      placeLabelEditedRef.current = false;
+      const requestId = ++placeLookupRef.current;
+      void reverseGeocodeNominatim(lngLat[0], lngLat[1])
+        .then((label) => {
+          if (
+            requestId !== placeLookupRef.current ||
+            placeLabelEditedRef.current ||
+            !label
+          ) {
+            return;
+          }
+          setLocationLabel(label);
+          void persistMapState({ coordinates: lngLat, locationLabel: label });
+        })
+        .catch(() => {
+          // Si no hay calle nueva, se conserva el lugar anterior.
+        });
+    },
+    [persistMapState],
+  );
 
   const onSelectPoint = useCallback(
     (lngLat: [number, number]) => {
@@ -525,6 +586,7 @@ export function InterventionMapPanel({
           zoneIEstimated: true,
           formulaVersion: INVERSE_SQUARE_FORMULA,
         });
+        refreshPlaceLabel(lngLat);
         return;
       }
 
@@ -553,8 +615,9 @@ export function InterventionMapPanel({
           ? { zoneIEstimated: false, formulaVersion: "v1-placeholder" }
           : {}),
       });
+      refreshPlaceLabel(lngLat);
     },
-    [alertReading, coordinates, effectiveReadOnly, persistMapState, radiusI, radiusII, zoningPhase],
+    [alertReading, coordinates, effectiveReadOnly, persistMapState, radiusI, radiusII, refreshPlaceLabel, zoningPhase],
   );
 
   const onSelectAlertReading = useCallback(
@@ -685,9 +748,60 @@ export function InterventionMapPanel({
 
   function activateTacticalPlacement(kind: TacticalPointKind) {
     setPlacementMode(kind);
+    setClearSketchesArmed(false);
     setToast(TACTICAL_POINT_PLACE_HINTS[kind]);
     setError(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function activateDraw() {
+    if (!coordinates) {
+      setError("Sitúa primero la fuente radiológica");
+      return;
+    }
+    setClearSketchesArmed(false);
+    if (placementMode === "draw") {
+      setPlacementMode("none");
+      setToast(null);
+      return;
+    }
+    setPlacementMode("draw");
+    setToast("Dibuja con un dedo o el lápiz. Con dos dedos mueves el mapa.");
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function commitSketch(draft: SketchDraft) {
+    if (effectiveReadOnly || draft.coordinates.length < 2) return;
+    const next = [
+      ...sketches,
+      {
+        id: crypto.randomUUID(),
+        color: draft.color,
+        coordinates: draft.coordinates,
+      },
+    ].slice(-MAX_SKETCHES);
+    setSketches(next);
+    setClearSketchesArmed(false);
+    setError(null);
+    void persistMapState({ sketches: next });
+  }
+
+  function undoSketch() {
+    const next = sketches.slice(0, -1);
+    setSketches(next);
+    setClearSketchesArmed(false);
+    void persistMapState({ sketches: next });
+  }
+
+  function clearSketches() {
+    if (!clearSketchesArmed) {
+      setClearSketchesArmed(true);
+      return;
+    }
+    setClearSketchesArmed(false);
+    setSketches([]);
+    void persistMapState({ sketches: [] });
   }
 
   function addAnnotation() {
@@ -723,6 +837,9 @@ export function InterventionMapPanel({
           radiusZoneIMeters={radiusI}
           radiusZoneIIMeters={radiusII}
           placementMode={effectiveReadOnly ? "none" : placementMode}
+          sketches={sketches}
+          sketchColor={sketchColor}
+          onCommitSketch={commitSketch}
           onSelectPoint={onSelectPoint}
           onSelectTacticalPoint={onSelectTacticalPoint}
           onSelectAlertReading={onSelectAlertReading}
@@ -745,6 +862,29 @@ export function InterventionMapPanel({
               ? `${coordinates[0].toFixed(6)}, ${coordinates[1].toFixed(6)}`
               : "[lng, lat]"}
           </span>
+        </div>
+
+        <div>
+          <Label htmlFor="place-label">Ubicación</Label>
+          <Input
+            id="place-label"
+            value={locationLabel}
+            maxLength={200}
+            disabled={effectiveReadOnly}
+            placeholder="Calle o referencia"
+            onChange={(event) => {
+              placeLabelEditedRef.current = true;
+              setLocationLabel(event.target.value);
+            }}
+            onBlur={() => {
+              const next = locationLabel.trim();
+              setLocationLabel(next);
+              void persistMapState({ locationLabel: next });
+            }}
+          />
+          <p className="mt-1 text-xs text-muted">
+            Al mover la fuente se propone la calle nueva. Puedes corregirla.
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -828,6 +968,74 @@ export function InterventionMapPanel({
                 </Button>
               ))}
             </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={activateDraw}
+              className={
+                placementMode === "draw"
+                  ? "w-full !border-2 !border-white ring-2 ring-ring"
+                  : "w-full !border-2 !border-white"
+              }
+            >
+              <Pencil className="min-h-4 min-w-4" />
+              Dibujar
+              {sketches.length > 0 ? ` (${sketches.length})` : ""}
+            </Button>
+            {placementMode === "draw" && (
+              <div className="space-y-2">
+                <div
+                  className="flex flex-wrap items-center gap-2"
+                  role="group"
+                  aria-label="Color del trazo"
+                >
+                  {SKETCH_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      aria-label={SKETCH_COLOR_LABELS[color]}
+                      aria-pressed={sketchColor === color}
+                      onClick={() => setSketchColor(color)}
+                      className={`h-8 w-8 rounded-full border-2 ${
+                        sketchColor === color
+                          ? "ring-2 ring-ring"
+                          : ""
+                      } ${
+                        color === "black"
+                          ? "border-slate-200"
+                          : sketchColor === color
+                            ? "border-foreground"
+                            : "border-border"
+                      }`}
+                      style={{ backgroundColor: SKETCH_COLOR_HEX[color] }}
+                    />
+                  ))}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="ml-auto h-8 px-2"
+                    onClick={undoSketch}
+                    disabled={sketches.length === 0}
+                  >
+                    <Undo2 className="h-3.5 w-3.5" />
+                    Deshacer
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-8 px-2"
+                    onClick={clearSketches}
+                    disabled={sketches.length === 0}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {clearSketchesArmed ? "¿Borrar?" : "Borrar"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted">
+                  Un dedo o el lápiz dibuja. Dos dedos mueven el mapa.
+                </p>
+              </div>
+            )}
           </div>
         )}
 

@@ -138,8 +138,8 @@ export function OperationParticipantCard({
   }
 
   return (
-    <li className="rounded-lg border border-border bg-card p-2">
-      <div className="flex items-start justify-between gap-2">
+    <li className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
+      <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-start gap-3">
           <ParticipantAvatar name={participant.name} />
           <div className="min-w-0">
@@ -151,60 +151,59 @@ export function OperationParticipantCard({
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {!readOnly && (
-            <>
-              <button
-                type="button"
-                onClick={() => void handlePlayStop()}
-                disabled={acting}
-                className={`inline-flex h-8 w-8 items-center justify-center rounded-md border border-border transition-colors ${
-                  participant.isActive
-                    ? "bg-danger text-danger-foreground hover:opacity-90"
-                    : "bg-success text-success-foreground hover:opacity-90"
-                } disabled:opacity-50`}
-                aria-label={participant.isActive ? "Detener" : "Iniciar"}
-                title={participant.isActive ? "Detener" : "Iniciar"}
-              >
-                {participant.isActive ? (
-                  <Pause className="h-4 w-4" aria-hidden />
-                ) : (
-                  <Play className="h-4 w-4" aria-hidden />
-                )}
-              </button>
-              <ZoneRadioToggle
-                name={`zone-${participant.userId}`}
-                value={displayZone}
-                onChange={(zone) => void handleZoneSelect(zone)}
-                disabled={acting}
-              />
-            </>
-          )}
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span
+            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${risk.className}`}
+          >
+            {risk.text}
+          </span>
+          <span className="text-xs text-muted">
+            Dosis acum. {formatAccumulatedDoseMsv(totals.accumulatedDoseMsv)}
+          </span>
+        </div>
+
+        <div className="mt-3">
+          <ParticipantDoseProgressRow
+            rateLabel={
+              hasMetrics
+                ? formatRate(displayZone, participant.zoneParams)
+                : "—"
+            }
+            timeLabel={formatDurationHms(totals.timeInZoneSeconds)}
+            percent={percent}
+          />
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span
-          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${risk.className}`}
-        >
-          {risk.text}
-        </span>
-        <span className="text-xs text-muted">
-          Dosis acum. {formatAccumulatedDoseMsv(totals.accumulatedDoseMsv)}
-        </span>
-      </div>
-
-      <div className="mt-3">
-        <ParticipantDoseProgressRow
-          rateLabel={
-            hasMetrics
-              ? formatRate(displayZone, participant.zoneParams)
-              : "—"
-          }
-          timeLabel={formatDurationHms(totals.timeInZoneSeconds)}
-          percent={percent}
-        />
-      </div>
+      {!readOnly && (
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void handlePlayStop()}
+            disabled={acting}
+            className={`inline-flex h-11 w-11 items-center justify-center rounded-md border border-border transition-colors ${
+              participant.isActive
+                ? "bg-danger text-danger-foreground hover:opacity-90"
+                : "bg-success text-success-foreground hover:opacity-90"
+            } disabled:opacity-50`}
+            aria-label={participant.isActive ? "Detener" : "Iniciar"}
+            title={participant.isActive ? "Detener" : "Iniciar"}
+          >
+            {participant.isActive ? (
+              <Pause className="h-5 w-5" aria-hidden />
+            ) : (
+              <Play className="h-5 w-5" aria-hidden />
+            )}
+          </button>
+          <ZoneRadioToggle
+            name={`zone-${participant.userId}`}
+            value={displayZone}
+            onChange={(zone) => void handleZoneSelect(zone)}
+            disabled={acting}
+          />
+        </div>
+      )}
     </li>
   );
 }

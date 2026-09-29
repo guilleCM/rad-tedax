@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { MapPin, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { canCreateIntervention } from "@/lib/services/permissions";
+import { canCreateIntervention, canDeleteIntervention } from "@/lib/services/permissions";
 import { listInterventions } from "@/lib/services/interventions";
+import { DeleteInterventionButton } from "@/components/interventions/DeleteInterventionButton";
 import { InterventionStatusBadge } from "@/components/interventions/InterventionStatusBadge";
 import { Button } from "@/components/ui/forms";
 
@@ -10,6 +11,7 @@ export default async function DashboardPage() {
   const session = await auth();
   const role = session?.user?.role ?? "participant";
   const canCreate = canCreateIntervention(role);
+  const canDelete = canDeleteIntervention(role);
 
   let interventions: Awaited<ReturnType<typeof listInterventions>> = [];
   let loadError: string | null = null;
@@ -66,10 +68,10 @@ export default async function DashboardPage() {
       {interventions.length > 0 ? (
         <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
           {interventions.map((item) => (
-            <li key={item.id}>
+            <li key={item.id} className="flex items-stretch hover:bg-surface">
               <Link
                 href={`/interventions/${item.id}/map`}
-                className="flex flex-col gap-1 px-4 py-4 hover:bg-surface sm:flex-row sm:items-center sm:justify-between"
+                className="flex min-w-0 flex-1 flex-col gap-1 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
                   <p className="font-medium text-foreground">{item.name}</p>
@@ -87,6 +89,15 @@ export default async function DashboardPage() {
                     : "Sin ubicación"}
                 </p>
               </Link>
+              {canDelete && (
+                <div className="flex items-center pr-3">
+                  <DeleteInterventionButton
+                    interventionId={item.id}
+                    interventionName={item.name}
+                    compact
+                  />
+                </div>
+              )}
             </li>
           ))}
         </ul>

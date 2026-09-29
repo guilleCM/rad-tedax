@@ -11,6 +11,7 @@ import {
 } from "@/lib/dosimetry/formatOperationDose";
 import { doseRiskLevel } from "@/lib/dosimetry/riskLevel";
 import {
+  OPERATION_TEAM_LABELS,
   TACTICAL_POINT_KINDS,
   type AccumulatedDoseUnit,
   type InterventionStatus,
@@ -21,11 +22,6 @@ import {
 } from "@/lib/types";
 import { TACTICAL_POINT_LABELS } from "@/lib/map/tacticalPoints";
 import { resolveAnnotations } from "@/domain/dosimetry/annotations";
-
-const OPERATION_TEAM_LABELS: Record<OperationTeam, string> = {
-  search: "Equipo de búsqueda",
-  intervention: "Equipo de intervención",
-};
 
 export type OperationReportParticipantSession = {
   startedAt: string;

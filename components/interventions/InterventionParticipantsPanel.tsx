@@ -342,7 +342,6 @@ export function InterventionParticipantsPanel({
         open={addOpen}
         onClose={() => setAddOpen(false)}
         interventionId={interventionId}
-        excludedUserIds={participants.map((participant) => participant.userId)}
         onAdded={(participant) => {
           setParticipants((current) => [...current, participant]);
           setMessage("Interviniente añadido");

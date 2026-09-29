@@ -16,7 +16,13 @@ import {
   TACTICAL_POINT_ICON_VIEWBOX,
   tacticalIconPathStrokes,
 } from "@/lib/map/tacticalPointIcons";
-import { TACTICAL_POINT_KINDS, type TacticalPointKind } from "@/lib/types";
+import { TACTICAL_POINT_KINDS, type MapSketch, type TacticalPointKind } from "@/lib/types";
+import {
+  SKETCH_CASING_WIDTH,
+  SKETCH_LINE_WIDTH,
+  sketchCasingHex,
+  sketchInkHex,
+} from "@/lib/map/sketches";
 
 const JPEG_QUALITY = 0.85;
 
@@ -116,6 +122,30 @@ function drawTacticalPointMarker(
   ctx.restore();
 }
 
+function drawSketches(
+  ctx: CanvasRenderingContext2D,
+  map: Map,
+  sketches: MapSketch[],
+) {
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const sketch of sketches) {
+    if (sketch.coordinates.length < 2) continue;
+    ctx.beginPath();
+    sketch.coordinates.forEach((lngLat, index) => {
+      const point = map.project(lngLat);
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.strokeStyle = sketchCasingHex(sketch.color);
+    ctx.lineWidth = SKETCH_CASING_WIDTH;
+    ctx.stroke();
+    ctx.strokeStyle = sketchInkHex(sketch.color);
+    ctx.lineWidth = SKETCH_LINE_WIDTH;
+    ctx.stroke();
+  }
+}
+
 export type CaptureMapSnapshotInput = {
   map: Map;
   coordinates: [number, number];
@@ -123,6 +153,7 @@ export type CaptureMapSnapshotInput = {
   alertReading?: [number, number] | null;
   radiusZoneIMeters: number;
   radiusZoneIIMeters: number;
+  sketches?: MapSketch[] | null;
 };
 
 export async function captureMapSnapshot(
@@ -135,6 +166,7 @@ export async function captureMapSnapshot(
     alertReading,
     radiusZoneIMeters,
     radiusZoneIIMeters,
+    sketches,
   } = input;
 
   try {
@@ -163,6 +195,10 @@ export async function captureMapSnapshot(
 
     if (overlay) {
       drawZoneCircles(ctx, overlay);
+    }
+
+    if (sketches && sketches.length > 0) {
+      drawSketches(ctx, map, sketches);
     }
 
     const dangerImg = await loadImage("/danger-point.png");

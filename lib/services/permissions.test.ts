@@ -49,7 +49,9 @@ function makeUser(role: UserDoc["role"], id = new ObjectId()): UserDoc {
 
 describe("permissions", () => {
   describe("user admin", () => {
-    it("labels participant as Interviniente", () => {
+    it("labels roles in Spanish", () => {
+      expect(roleLabel("manager")).toBe("Administrador");
+      expect(roleLabel("leader")).toBe("Jefe de grupo");
       expect(roleLabel("participant")).toBe("Interviniente");
     });
 
